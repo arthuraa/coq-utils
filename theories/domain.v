@@ -77,7 +77,9 @@ Local Open Scope dom_scope.
 Section Theory.
 
 Variable (T : domType).
-Implicit Types (x y : T).
+Implicit Types x y z : T.
+Implicit Types xs ys zs : seq T.
+Implicit Types P : pred T.
 
 Lemma lubxx x : x ⊔ x = Some x.
 Proof. by case: T x => [? [? []]]. Qed.
@@ -90,6 +92,9 @@ Proof. by case: T x y z => [? [? []]]. Qed.
 
 Definition approx x y := x ⊔ y == Some y.
 
+Notation "x ⊑ y" := (approx x y) : dom_scope.
+Notation "x ⊑ y ⊑ z" := (approx x y && approx y z) : dom_scope.
+
 Lemma approx_refl : reflexive approx.
 Proof. by move=> x; rewrite /approx lubxx. Qed.
 Lemma approx_trans : transitive approx.
@@ -101,6 +106,46 @@ Lemma anti_approx : antisymmetric approx.
 Proof.
 move=> x y; rewrite /approx lubC.
 by case/andP => /eqP -> /eqP [->].
+Qed.
+
+Definition is_ub x ys := all (approx^~ x) ys.
+Definition is_lub x ys :=
+  is_ub x ys /\ forall x', is_ub x' ys -> x ⊑ x'.
+
+Lemma lub_approxL x y xy : x ⊔ y = Some xy -> x ⊑ xy.
+Proof.
+rewrite /approx => exy.
+by move: (lubA x x y); rewrite exy lubxx /= -exy => <-.
+Qed.
+
+Lemma lub_approxR x y xy : x ⊔ y = Some xy -> y ⊑ xy.
+Proof. by rewrite lubC; apply: lub_approxL. Qed.
+
+Lemma lub_approx x y z :
+  (x ⊑ z) && (y ⊑ z) = if x ⊔ y is Some xy then xy ⊑ z else false.
+Proof.
+apply/(sameP andP)/(iffP idP).
+  case exy: (x ⊔ y) => [xy|] //= xy_z.
+  by split; apply: approx_trans xy_z;
+  rewrite (lub_approxL exy, lub_approxR exy).
+case=> /eqP exz /eqP eyz.
+move: (lubA x y z); rewrite eyz /= exz.
+by case: (x ⊔ y) => [xy|] //= /eqP.
+Qed.
+
+Definition lubn xs : option T :=
+  if xs is x :: xs' then
+    foldl (fun ox x' => obind (fun x => lub x x') ox) (Some x) xs'
+  else None.
+
+Lemma lubnP xs y :
+  ~~ nilp xs && all (approx^~ y) xs
+  = if lubn xs is Some x then x ⊑ y else false.
+Proof.
+case: xs => [|x xs] //=.
+elim: xs x => [|x' xs IH] x //=; first by rewrite andbT.
+rewrite andbA lub_approx; case: (x ⊔ x') => [xx'|] //=.
+by rewrite (_ : foldl _ _ _ = None) //; elim: xs {x IH}.
 Qed.
 
 End Theory.
