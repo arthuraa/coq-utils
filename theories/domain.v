@@ -16,15 +16,10 @@ Module Dom.
 Section ClassDef.
 
 Record mixin_of T := Mixin {
-  approx : rel T;
-  merge : T -> T -> T;
-  _ : reflexive approx;
-  _ : transitive approx;
-  _ : antisymmetric approx;
-  _ : forall x y, approx x (merge x y);
-  _ : forall x y z,
-        (approx y (merge x y) && approx (merge x y) z)
-        = (approx x z && approx y z)
+  lub : T -> T -> option T;
+  _ : forall x, lub x x = Some x;
+  _ : commutative lub;
+  _ : forall x y z, obind (lub^~ z) (lub x y) = obind (lub x) (lub y z)
 }.
 
 Record class_of T := Class {base : Countable.class_of T; mixin : mixin_of T}.
@@ -72,12 +67,8 @@ End Dom.
 
 Export Dom.Exports.
 
-Definition approx T := Dom.approx (Dom.class T).
-Definition merge T := Dom.merge (Dom.class T).
-
-Notation "x ⊑ y" := (approx x y) : dom_scope.
-Notation "x ⊑ y ⊑ z" := (approx x y && approx y z) : dom_scope.
-Notation "x ⊔ y" := (merge x y) : dom_scope.
+Definition lub T := Dom.lub (Dom.class T).
+Notation "x ⊔ y" := (lub x y) : dom_scope.
 
 Local Open Scope dom_scope.
 
@@ -86,47 +77,41 @@ Section Theory.
 Variable (T : domType).
 Implicit Types (x y : T).
 
-Lemma approx_refl : reflexive (@approx T).
+Lemma lubxx x : x ⊔ x = Some x.
+Proof. by case: T x => [? [? []]]. Qed.
+
+Lemma lubC : commutative (@lub T).
 Proof. by case: T => [? [? []]]. Qed.
 
-Lemma approx_trans : transitive (@approx T).
-Proof. by case: T => [? [? []]]. Qed.
+Lemma lubA x y z : obind ((@lub T)^~ z) (lub x y) = obind (lub x) (lub y z).
+Proof. by case: T x y z => [? [? []]]. Qed.
 
-Lemma anti_approx : antisymmetric (@approx T).
-Proof. by case: T => [? [? []]]. Qed.
+Definition approx x y := x ⊔ y == Some y.
 
-Lemma approx_mergel x y : x ⊑ x ⊔ y.
-Proof. by case: T x y => [? [? []]]. Qed.
-
-Lemma merge_lub x y z : y ⊑ x ⊔ y ⊑ z = (x ⊑ z) && (y ⊑ z).
-Proof. by case: T x y z=> [? [? []]]. Qed.
-
-Lemma approx_merger x y z : x ⊑ z -> y ⊑ z -> y ⊑ x ⊔ y.
+Lemma approx_refl : reflexive approx.
+Proof. by move=> x; rewrite /approx lubxx. Qed.
+Lemma approx_trans : transitive approx.
 Proof.
-move=> xz yz; have := merge_lub x y z; rewrite xz yz.
-by case/andP.
+move=> y x z /eqP xy /eqP yz; rewrite /approx.
+by move: (lubA x y z); rewrite xy yz /= -yz => ->.
 Qed.
-
-Lemma mergeC x y z : x ⊑ z -> y ⊑ z -> x ⊔ y = y ⊔ x.
+Lemma anti_approx : antisymmetric approx.
 Proof.
-move=> xz yz; move: (merge_lub x y z) (merge_lub y x z).
-rewrite xz yz; case/andP=> yxy _; case/andP=> xyx _.
-apply: anti_approx.
-move: (merge_lub x y (y ⊔ x)) (merge_lub y x (x ⊔ y)).
-by rewrite yxy xyx !approx_mergel /= => -> ->.
+move=> x y; rewrite /approx lubC.
+by case/andP => /eqP -> /eqP [->].
 Qed.
-
-Lemma mergeC' x y : y ⊑ x ⊔ y -> x ⊔ y = y ⊔ x.
-Proof. by apply: mergeC; rewrite approx_mergel. Qed.
 
 End Theory.
+
+Notation "x ⊑ y" := (approx x y) : dom_scope.
+Notation "x ⊑ y ⊑ z" := (approx x y && approx y z) : dom_scope.
 
 Module Discrete.
 
 Section ClassDef.
 
 Record mixin_of (T : domType) := Mixin {
-  _ : forall x y : T, x ⊑ y = (x == y)
+  _ : forall x y : T, x ⊔ y = if x == y then Some x else None
 }.
 
 Section Mixins.
@@ -134,29 +119,25 @@ Section Mixins.
 Variable T : countType.
 Implicit Types x y : T.
 
-Definition dapprox x y := (x == y).
-Definition dmerge x y := x.
+Definition dlub x y := if x == y then Some x else None.
 
-Lemma dapprox_refl : reflexive dapprox.
-Proof. exact: eqxx. Qed.
-Lemma dapprox_trans : transitive dapprox.
-Proof. by move=> ??? /eqP ->. Qed.
-Lemma anti_dapprox : antisymmetric dapprox.
-Proof. by move=> x y /andP [/eqP ->]. Qed.
-Lemma dapprox_mergel x y : dapprox x (dmerge x y).
-Proof. exact: eqxx. Qed.
-Lemma dmerge_lub x y z :
-  (dapprox y (dmerge x y) && dapprox (dmerge x y) z)
-  = (dapprox x z && dapprox y z).
+Lemma dlubxx x : dlub x x = Some x.
+Proof. by rewrite /dlub eqxx. Qed.
+
+Lemma dlubC : commutative dlub.
 Proof.
-rewrite /dapprox /dmerge.
-by case: (x =P z) => [->|_]; rewrite (andbF, andbT).
+by move=> x y; rewrite /dlub eq_sym; case: eqP=> // ->.
 Qed.
 
-Definition DefDomMixin :=
-  DomMixin dapprox_refl dapprox_trans anti_dapprox dapprox_mergel dmerge_lub.
+Lemma dlubA x y z : obind (dlub^~ z) (dlub x y) = obind (dlub x) (dlub y z).
+Proof.
+rewrite /dlub; have [->|ne] /= := altP (x =P y).
+  by case: eqP => //=; rewrite eqxx.
+by case: eqP => //=; rewrite (negbTE ne).
+Qed.
 
-Definition DefMixin :=
+Definition DefDomMixin := DomMixin dlubxx dlubC dlubA.
+Program Definition DefMixin :=
   @Mixin (DomType T DefDomMixin) (fun _ _ => erefl).
 
 End Mixins.
@@ -231,11 +212,11 @@ Section DiscreteTheory.
 Variable T : discDomType.
 Implicit Types x y : T.
 
-Lemma approxD x y : x ⊑ y = (x == y).
+Lemma lubD x y : x ⊔ y = if x == y then Some x else None.
 Proof. by case: T x y => [? [? []]]. Qed.
 
-Lemma mergeD x y : x ⊔ y = x.
-Proof. by move: (approx_mergel x y); rewrite approxD => /eqP <-. Qed.
+Lemma approxD x y : x ⊑ y = (x == y).
+Proof. by rewrite /approx lubD; case: ifP => //= ->. Qed.
 
 End DiscreteTheory.
 
@@ -244,40 +225,26 @@ Section Lifting.
 Variable T : domType.
 Implicit Types x y : option T.
 
-Definition oapprox x y :=
+Definition olub x y :=
   match x, y with
-  | Some x, Some y => x ⊑ y
-  | Some _, _      => false
-  | None  , _      => true
+  | Some x, Some y => omap Some (x ⊔ y)
+  | Some _, None   => Some x
+  | None  , _      => Some y
   end.
 
-Definition omerge x y :=
-  match x, y with
-  | Some x, Some y => Some (x ⊔ y)
-  | Some _, _      => x
-  | None  , _      => y
-  end.
-
-Lemma oapprox_refl : reflexive oapprox.
-Proof. by case=> [x|] //=; rewrite approx_refl. Qed.
-Lemma oapprox_trans : transitive oapprox.
-Proof. case=> [z|] [x|] [y|] //=; exact: approx_trans. Qed.
-Lemma anti_oapprox : antisymmetric oapprox.
-Proof. by case=> [x|] [y|] //= /anti_approx ->. Qed.
-Lemma oapprox_mergel x y : oapprox x (omerge x y).
+Lemma olubxx x : olub x x = Some x.
+Proof. by case: x => [x|] //=; rewrite lubxx. Qed.
+Lemma olubC : commutative olub.
+Proof. by move=> [x|] [y|] //=; rewrite /olub lubC. Qed.
+Lemma olubA x y z : obind (olub^~ z) (olub x y) = obind (olub x) (olub y z).
 Proof.
-by case: x y => [x|] [y|] //=; rewrite (approx_mergel, approx_refl).
-Qed.
-Lemma omerge_lub x y z :
-  (oapprox y (omerge x y) && oapprox (omerge x y) z)
-  = (oapprox x z && oapprox y z).
-Proof.
-by case: x y z => [x|] [y|] [z|] //=;
-rewrite ?approx_refl ?merge_lub ?andbT ?andbF.
+case: x y z => [x|] [y|] [z|] //=; try by case: lub.
+case: (x ⊔ y) (lubA x y z) => [xy|] //=.
+  by move=> ->; case: lub.
+by case: lub=> //= ? <-.
 Qed.
 
-Definition option_domMixin :=
-  DomMixin oapprox_refl oapprox_trans anti_oapprox oapprox_mergel omerge_lub.
+Definition option_domMixin := DomMixin olubxx olubC olubA.
 Canonical option_domType := Eval hnf in DomType (option T) option_domMixin.
 
 End Lifting.
