@@ -1,6 +1,8 @@
 From mathcomp
 Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype.
 
+Require Import ord fset.
+
 Set Implicit Arguments.
 Unset Strict Implicit.
 Unset Printing Implicit Defensive.
@@ -22,8 +24,8 @@ Record mixin_of T := Mixin {
   _ : forall x y z, obind (lub^~ z) (lub x y) = obind (lub x) (lub y z)
 }.
 
-Record class_of T := Class {base : Countable.class_of T; mixin : mixin_of T}.
-Local Coercion base : class_of >->  Countable.class_of.
+Record class_of T := Class {base : Ord.Total.class_of T; mixin : mixin_of T}.
+Local Coercion base : class_of >-> Ord.Total.class_of.
 
 Structure type := Pack {sort; _ : class_of sort; _ : Type}.
 Local Coercion sort : type >-> Sortclass.
@@ -34,25 +36,25 @@ Let xT := let: Pack T _ _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack m :=
-  fun b bT & phant_id (Countable.class bT) b => Pack (@Class T b m) T.
+  fun b bT & phant_id (Ord.Total.class bT) b => Pack (@Class T b m) T.
 
 (* Inheritance *)
 Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
-Definition countType := @Countable.Pack cT xclass xT.
+Definition ordType := @Ord.Total.Pack cT xclass xT.
 
 End ClassDef.
 
 Module Import Exports.
-Coercion base : class_of >-> Countable.class_of.
+Coercion base : class_of >-> Ord.Total.class_of.
 Coercion mixin : class_of >-> mixin_of.
 Coercion sort : type >-> Sortclass.
 Coercion eqType : type >-> Equality.type.
 Canonical eqType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
-Coercion countType : type >-> Countable.type.
-Canonical countType.
+Coercion ordType : type >-> Ord.Total.type.
+Canonical ordType.
 Notation domType := type.
 Notation domMixin := mixin_of.
 Notation DomMixin := Mixin.
@@ -116,7 +118,7 @@ Record mixin_of (T : domType) := Mixin {
 
 Section Mixins.
 
-Variable T : countType.
+Variable T : ordType.
 Implicit Types x y : T.
 
 Definition dlub x y := if x == y then Some x else None.
@@ -161,7 +163,7 @@ Definition pack b0 (m0 : mixin_of (@Dom.Pack T b0 T)) :=
 (* Inheritance *)
 Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
-Definition countType := @Countable.Pack cT xclass xT.
+Definition ordType := @Ord.Total.Pack cT xclass xT.
 Definition domType := @Dom.Pack cT xclass xT.
 
 End ClassDef.
@@ -174,8 +176,8 @@ Coercion eqType : type >-> Equality.type.
 Canonical eqType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
-Coercion countType : type >-> Countable.type.
-Canonical countType.
+Coercion ordType : type >-> Ord.Total.type.
+Canonical ordType.
 Coercion domType : type >-> Dom.type.
 Canonical domType.
 Notation discDomType := type.
@@ -183,7 +185,7 @@ Notation discDomMixin := mixin_of.
 Notation DiscDomMixin := Mixin.
 Notation DiscDomType T m := (@pack T _ m _ _ id _ id).
 Notation "[ 'domType' 'for' T 'by' // ]" :=
-  (DomType T (DefDomMixin [countType of T]))
+  (DomType T (DefDomMixin [ordType of T]))
   (at level 0, format "[ 'domType'  'for'  T  'by'  // ]")
   : form_scope.
 Notation "[ 'discDomType' 'for' T ]" :=
