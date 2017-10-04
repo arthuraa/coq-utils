@@ -238,3 +238,46 @@ Lemma mergeD x y : x ⊔ y = x.
 Proof. by move: (approx_mergel x y); rewrite approxD => /eqP <-. Qed.
 
 End DiscreteTheory.
+
+Section Lifting.
+
+Variable T : domType.
+Implicit Types x y : option T.
+
+Definition oapprox x y :=
+  match x, y with
+  | Some x, Some y => x ⊑ y
+  | Some _, _      => false
+  | None  , _      => true
+  end.
+
+Definition omerge x y :=
+  match x, y with
+  | Some x, Some y => Some (x ⊔ y)
+  | Some _, _      => x
+  | None  , _      => y
+  end.
+
+Lemma oapprox_refl : reflexive oapprox.
+Proof. by case=> [x|] //=; rewrite approx_refl. Qed.
+Lemma oapprox_trans : transitive oapprox.
+Proof. case=> [z|] [x|] [y|] //=; exact: approx_trans. Qed.
+Lemma anti_oapprox : antisymmetric oapprox.
+Proof. by case=> [x|] [y|] //= /anti_approx ->. Qed.
+Lemma oapprox_mergel x y : oapprox x (omerge x y).
+Proof.
+by case: x y => [x|] [y|] //=; rewrite (approx_mergel, approx_refl).
+Qed.
+Lemma omerge_lub x y z :
+  (oapprox y (omerge x y) && oapprox (omerge x y) z)
+  = (oapprox x z && oapprox y z).
+Proof.
+by case: x y z => [x|] [y|] [z|] //=;
+rewrite ?approx_refl ?merge_lub ?andbT ?andbF.
+Qed.
+
+Definition option_domMixin :=
+  DomMixin oapprox_refl oapprox_trans anti_oapprox oapprox_mergel omerge_lub.
+Canonical option_domType := Eval hnf in DomType (option T) option_domMixin.
+
+End Lifting.
