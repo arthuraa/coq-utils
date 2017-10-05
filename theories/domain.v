@@ -445,3 +445,36 @@ Definition option_domMixin := DomMixin olubP.
 Canonical option_domType := Eval hnf in DomType (option T) option_domMixin.
 
 End Lifting.
+
+Section ProductDomain.
+
+Variables T S : domType.
+Implicit Types (x : T) (y : S) (p : T * S).
+
+Definition prod_lub p1 p2 :=
+  match p1.1 ⊔ p2.1, p1.2 ⊔ p2.2 with
+  | Some x, Some y => Some (x, y)
+  | _     , _      => None
+  end.
+
+Lemma prod_lubP : Dom.axioms prod_lub.
+Proof.
+rewrite /prod_lub; split.
+- by case=> x y; rewrite /= !lubxx.
+- by case=> [x1 y1] [x2 y2]; rewrite (lubC x1) (lubC y1).
+case=> [x1 y1] [x2 y2] [x3 y3] /=.
+move: (lubA x1 x2 x3) (lubA y1 y2 y3).
+case: (x1 ⊔ x2) (y1 ⊔ y2)=> [x12|] [y12|] /=.
+- move=> -> ->.
+  case: (x2 ⊔ x3) (y2 ⊔ y3) => [x23|] [y23|] //=.
+  by case: lub.
+- case: (x2 ⊔ x3) (y2 ⊔ y3) => [x23|] [y23|] //= _ <-.
+  by case: lub.
+- by case: (x2 ⊔ x3) (y2 ⊔ y3)=> [x23|] [y23|] //= <-.
+by case: (x2 ⊔ x3) (y2 ⊔ y3)=> [x23|] [y23|] //= <-.
+Qed.
+
+Definition prod_domMixin := DomMixin prod_lubP.
+Canonical prod_domType := Eval hnf in DomType (T * S) prod_domMixin.
+
+End ProductDomain.
