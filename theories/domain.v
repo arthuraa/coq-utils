@@ -444,7 +444,67 @@ Qed.
 Definition option_domMixin := DomMixin olubP.
 Canonical option_domType := Eval hnf in DomType (option T) option_domMixin.
 
+Lemma oapprE x y :
+  x ⊑ y =
+  if x is Some x then
+    if y is Some y then x ⊑ y else false
+  else true.
+Proof.
+case: x y => [x|] [y|] //=; rewrite /appr /= ?eqxx //.
+by rewrite {1}/lub /=; case: (x ⊔ y).
+Qed.
+
+Lemma apprBx x : None ⊑ x.
+Proof. by rewrite oapprE. Qed.
+
+Lemma apprxB x : x ⊑ None = (x == None).
+Proof. by rewrite oapprE; case: x. Qed.
+
 End Lifting.
+
+Section Retraction.
+
+Variable T : domType.
+Implicit Types (xs : {fset T}) (x y : T).
+
+Definition retraction xs x :=
+  lubn (fset [seq y <- xs| y ⊑ x]).
+
+Lemma retraction_appr xs x : retraction xs x ⊑ Some x.
+Proof.
+rewrite /retraction oapprE; case: lubnP=> [x' ne0 /(_ x)|] //=.
+by rewrite all_fset filter_all => <-.
+Qed.
+
+Lemma retraction_lub_closure xs x x' :
+  retraction xs x = Some x' ->
+  x' \in lub_closure xs.
+Proof.
+move=> e; apply/lub_closureP; exists (fset [seq y <- xs | y ⊑ x])=> //.
+by apply/fsubsetP => y; rewrite in_fset mem_filter => /andP [].
+Qed.
+
+Lemma retraction_idem xs x :
+  obind (retraction xs) (retraction xs x) = retraction xs x.
+Proof.
+rewrite /retraction; case: lubnP=> //= x' ne0 Px'.
+apply: appr_lubn.
+  move: ne0; rewrite -!fsubset0; apply: contra; apply: fsubset_trans.
+  apply/fsubsetP => y; rewrite !in_fset !mem_filter.
+  case/andP=> yx in_xs; rewrite in_xs andbT.
+  move: (Px' x'); rewrite appr_refl all_fset.
+  by move/allP; apply; rewrite mem_filter yx.
+move=> y; rewrite all_fset; apply/(sameP allP)/(iffP idP).
+  move=> x'y y'; rewrite mem_filter => /andP [y'x' y'_in_xs].
+  exact: appr_trans y'x' x'y.
+rewrite -Px' => Px; apply/allP=> y'; rewrite in_fset mem_filter.
+case/andP=> [y'x y'_in_xs].
+apply: (Px y'); rewrite mem_filter y'_in_xs andbT.
+move: (Px' x'); rewrite appr_refl => /allP; apply.
+by rewrite in_fset mem_filter y'x.
+Qed.
+
+End Retraction.
 
 Section ProductDomain.
 
