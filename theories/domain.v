@@ -17,11 +17,15 @@ Module Dom.
 
 Section ClassDef.
 
-Record mixin_of T := Mixin {
-  lub : T -> T -> option T;
+Record axioms T (lub : T -> T -> option T) := Ax {
   _ : forall x, lub x x = Some x;
   _ : commutative lub;
   _ : forall x y z, obind (lub^~ z) (lub x y) = obind (lub x) (lub y z)
+}.
+
+Record mixin_of T := Mixin {
+  lub : T -> T -> option T;
+  _ : axioms lub
 }.
 
 Record class_of T := Class {base : Ord.Total.class_of T; mixin : mixin_of T}.
@@ -83,40 +87,40 @@ Implicit Types xs ys zs : {fset T}.
 Implicit Types P : pred T.
 
 Lemma lubxx x : x ⊔ x = Some x.
-Proof. by case: T x => [? [? []]]. Qed.
+Proof. by case: T x => [? [? [? []]]]. Qed.
 
 Lemma lubC : commutative (@lub T).
-Proof. by case: T => [? [? []]]. Qed.
+Proof. by case: T => [? [? [? []]]]. Qed.
 
 Lemma lubA x y z : obind ((@lub T)^~ z) (lub x y) = obind (lub x) (lub y z).
-Proof. by case: T x y z => [? [? []]]. Qed.
+Proof. by case: T x y z => [? [? [? []]]]. Qed.
 
-Definition approx x y := x ⊔ y == Some y.
+Definition appr x y := x ⊔ y == Some y.
 
-Notation "x ⊑ y" := (approx x y) : dom_scope.
-Notation "x ⊑ y ⊑ z" := (approx x y && approx y z) : dom_scope.
+Notation "x ⊑ y" := (appr x y) : dom_scope.
+Notation "x ⊑ y ⊑ z" := (appr x y && appr y z) : dom_scope.
 
-Lemma approx_refl : reflexive approx.
-Proof. by move=> x; rewrite /approx lubxx. Qed.
-Lemma approx_trans : transitive approx.
+Lemma appr_refl : reflexive appr.
+Proof. by move=> x; rewrite /appr lubxx. Qed.
+Lemma appr_trans : transitive appr.
 Proof.
-move=> y x z /eqP xy /eqP yz; rewrite /approx.
+move=> y x z /eqP xy /eqP yz; rewrite /appr.
 by move: (lubA x y z); rewrite xy yz /= -yz => ->.
 Qed.
-Lemma anti_approx : antisymmetric approx.
+Lemma anti_appr : antisymmetric appr.
 Proof.
-move=> x y; rewrite /approx lubC.
+move=> x y; rewrite /appr lubC.
 by case/andP => /eqP -> /eqP [->].
 Qed.
 
-Lemma lub_approxL x y xy : x ⊔ y = Some xy -> x ⊑ xy.
+Lemma lub_apprL x y xy : x ⊔ y = Some xy -> x ⊑ xy.
 Proof.
-rewrite /approx => exy.
+rewrite /appr => exy.
 by move: (lubA x x y); rewrite exy lubxx /= -exy => <-.
 Qed.
 
-Lemma lub_approxR x y xy : x ⊔ y = Some xy -> y ⊑ xy.
-Proof. by rewrite lubC; apply: lub_approxL. Qed.
+Lemma lub_apprR x y xy : x ⊔ y = Some xy -> y ⊑ xy.
+Proof. by rewrite lubC; apply: lub_apprL. Qed.
 
 (* XXX: This can probably be subsumed by the nary version *)
 Notation is_lub x y oxy :=
@@ -126,8 +130,8 @@ Lemma is_lub_lub x y : is_lub x y (x ⊔ y).
 Proof.
 move=> z; apply/(sameP andP)/(iffP idP).
   case exy: (x ⊔ y) => [xy|] //= xy_z.
-  by split; apply: approx_trans xy_z;
-  rewrite (lub_approxL exy, lub_approxR exy).
+  by split; apply: appr_trans xy_z;
+  rewrite (lub_apprL exy, lub_apprR exy).
 case=> /eqP exz /eqP eyz.
 move: (lubA x y z); rewrite eyz /= exz.
 by case: (x ⊔ y) => [xy|] //= /eqP.
@@ -144,10 +148,10 @@ Proof. by move: (is_lub_lub x y); case: (x ⊔ y); constructor. Qed.
 Lemma lub_unique x y oxy : is_lub x y oxy -> oxy = x ⊔ y.
 Proof.
 case: (lubP x y) oxy => [xy|] h1 [xy'|] h2 //.
-- congr Some; apply: anti_approx.
-  by rewrite -h2 h1 approx_refl -h1 h2 approx_refl.
-- by move: (h1 xy) (h2 xy) => ->; rewrite approx_refl.
-by move: (h2 xy') (h1 xy') => ->; rewrite approx_refl.
+- congr Some; apply: anti_appr.
+  by rewrite -h2 h1 appr_refl -h1 h2 appr_refl.
+- by move: (h1 xy) (h2 xy) => ->; rewrite appr_refl.
+by move: (h2 xy') (h1 xy') => ->; rewrite appr_refl.
 Qed.
 
 Definition lubn xs : option T :=
@@ -165,7 +169,7 @@ Lemma lubn_neq0 xs : lubn xs -> xs != fset0.
 Proof. by apply: contraTN => /eqP ->. Qed.
 
 Notation is_lubn xs ox :=
-  (forall y, (xs != fset0) && all (approx^~ y) (FSet.fsval xs)
+  (forall y, (xs != fset0) && all (appr^~ y) (FSet.fsval xs)
    = if ox is Some x then x ⊑ y else false).
 
 Lemma is_lubn_lubn xs : is_lubn xs (lubn xs).
@@ -179,16 +183,16 @@ Qed.
 
 CoInductive lubn_spec xs : option T -> Type :=
 | LubnSome x of xs != fset0
-  & (forall y, all (approx^~ y) xs = x ⊑ y)
+  & (forall y, all (appr^~ y) xs = x ⊑ y)
   : lubn_spec xs (Some x)
 | LubnNone
-  of (xs != fset0 -> forall y, all (approx^~ y) xs = false)
+  of (xs != fset0 -> forall y, all (appr^~ y) xs = false)
   : lubn_spec xs None.
 
 Lemma lubnP xs : lubn_spec xs (lubn xs).
 Proof.
 move: (is_lubn_lubn xs); case e: (lubn xs) => [x|] /= h; constructor.
-- by move: (h x); rewrite approx_refl; case/andP.
+- by move: (h x); rewrite appr_refl; case/andP.
 - by move=> y; rewrite -h lubn_neq0 ?e.
 by move=> ne0 y; rewrite -(h y) ne0.
 Qed.
@@ -196,27 +200,27 @@ Qed.
 Lemma lubn_unique xs ox : is_lubn xs ox -> ox = lubn xs.
 Proof.
 case: (lubnP xs) ox=> [x ne|] h1 [x'|] h2 //.
-- congr Some; apply: anti_approx; rewrite ne /= in h2.
-  by rewrite -h2 h1 approx_refl -h1 h2 approx_refl.
-- by move: (h1 x) (h2 x); rewrite ne approx_refl => ->.
-move: (h2 x'); rewrite approx_refl => /andP [ne {h2} h2].
+- congr Some; apply: anti_appr; rewrite ne /= in h2.
+  by rewrite -h2 h1 appr_refl -h1 h2 appr_refl.
+- by move: (h1 x) (h2 x); rewrite ne appr_refl => ->.
+move: (h2 x'); rewrite appr_refl => /andP [ne {h2} h2].
 by rewrite h1 in h2.
 Qed.
 
-Lemma approx_lubn xs x :
+Lemma appr_lubn xs x :
   xs != fset0 ->
-  (forall y, all (approx ^~ y) xs = x ⊑ y) ->
+  (forall y, all (appr ^~ y) xs = x ⊑ y) ->
   lubn xs = Some x.
 Proof.
 move=> ne0 h; case: lubnP=> [x' _ h'|/(_ ne0) /(_ x)].
-  congr Some; apply: anti_approx.
-  by rewrite -h' h approx_refl -h h' approx_refl.
-by rewrite h approx_refl.
+  congr Some; apply: anti_appr.
+  by rewrite -h' h appr_refl -h h' appr_refl.
+by rewrite h appr_refl.
 Qed.
 
-Lemma lubn_approx_conv xs x y :
+Lemma lubn_appr_conv xs x y :
   lubn xs = Some x ->
-  all (approx^~ y) xs = x ⊑ y.
+  all (appr^~ y) xs = x ⊑ y.
 Proof. by move=> e; move: (is_lubn_lubn xs y); rewrite lubn_neq0 ?e //. Qed.
 
 Lemma lubnU xs ys :
@@ -307,8 +311,8 @@ Qed.
 
 End Theory.
 
-Notation "x ⊑ y" := (approx x y) : dom_scope.
-Notation "x ⊑ y ⊑ z" := (approx x y && approx y z) : dom_scope.
+Notation "x ⊑ y" := (appr x y) : dom_scope.
+Notation "x ⊑ y ⊑ z" := (appr x y && appr y z) : dom_scope.
 
 Module Discrete.
 
@@ -323,26 +327,18 @@ Section Mixins.
 Variable T : ordType.
 Implicit Types x y : T.
 
-Definition dlub x y := if x == y then Some x else None.
-
-Lemma dlubxx x : dlub x x = Some x.
-Proof. by rewrite /dlub eqxx. Qed.
-
-Lemma dlubC : commutative dlub.
+Lemma dlubP : Dom.axioms (fun x y => if x == y then Some x else None).
 Proof.
-by move=> x y; rewrite /dlub eq_sym; case: eqP=> // ->.
-Qed.
-
-Lemma dlubA x y z : obind (dlub^~ z) (dlub x y) = obind (dlub x) (dlub y z).
-Proof.
-rewrite /dlub; have [->|ne] /= := altP (x =P y).
+split.
+- by move=> x; rewrite eqxx.
+- by move=> x y; rewrite eq_sym; case: eqP=> // ->.
+move=> x y z; have [->|ne] /= := altP (x =P y).
   by case: eqP => //=; rewrite eqxx.
 by case: eqP => //=; rewrite (negbTE ne).
 Qed.
 
-Definition DefDomMixin := DomMixin dlubxx dlubC dlubA.
-Program Definition DefMixin :=
-  @Mixin (DomType T DefDomMixin) (fun _ _ => erefl).
+Definition DefDomMixin := DomMixin dlubP.
+Definition DefMixin := @Mixin (DomType T DefDomMixin) (fun _ _ => erefl).
 
 End Mixins.
 
@@ -419,8 +415,8 @@ Implicit Types x y : T.
 Lemma lubD x y : x ⊔ y = if x == y then Some x else None.
 Proof. by case: T x y => [? [? []]]. Qed.
 
-Lemma approxD x y : x ⊑ y = (x == y).
-Proof. by rewrite /approx lubD; case: ifP => //= ->. Qed.
+Lemma apprD x y : x ⊑ y = (x == y).
+Proof. by rewrite /appr lubD; case: ifP => //= ->. Qed.
 
 End DiscreteTheory.
 
@@ -436,19 +432,16 @@ Definition olub x y :=
   | None  , _      => Some y
   end.
 
-Lemma olubxx x : olub x x = Some x.
-Proof. by case: x => [x|] //=; rewrite lubxx. Qed.
-Lemma olubC : commutative olub.
-Proof. by move=> [x|] [y|] //=; rewrite /olub lubC. Qed.
-Lemma olubA x y z : obind (olub^~ z) (olub x y) = obind (olub x) (olub y z).
+Lemma olubP : Dom.axioms olub.
 Proof.
-case: x y z => [x|] [y|] [z|] //=; try by case: lub.
-case: (x ⊔ y) (lubA x y z) => [xy|] //=.
-  by move=> ->; case: lub.
-by case: lub=> //= ? <-.
+split.
+- by case=> [x|] //=; rewrite lubxx.
+- by move=> [x|] [y|] //=; rewrite /olub lubC.
+case=> [x|] [y|] [z|] //=; try by case: lub.
+by case: (x ⊔ y) (lubA x y z) => [xy /= ->|] /=; case: lub=> //= ? <-.
 Qed.
 
-Definition option_domMixin := DomMixin olubxx olubC olubA.
+Definition option_domMixin := DomMixin olubP.
 Canonical option_domType := Eval hnf in DomType (option T) option_domMixin.
 
 End Lifting.
