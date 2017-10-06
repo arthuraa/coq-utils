@@ -1,7 +1,7 @@
 From mathcomp
 Require Import ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype.
 
-Require Import ord fset.
+Require Import ord fset fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -240,6 +240,22 @@ case: (lubn xs) (lubn ys) => [x|] [y|] //; last by rewrite andbF.
 exact: is_lub_lub.
 Qed.
 
+Lemma lubnS xs ys :
+  fsubset xs ys ->
+  match lubn xs, lubn ys with
+  | Some x, Some y => x ⊑ y
+  | None  , Some y => xs == fset0
+  | _     , _      => true
+  end.
+Proof.
+rewrite -{-1}(fsetID ys xs) => /fsetIidPr ->; rewrite lubnU.
+case: (lubnP xs)=> [x nx0 Px|].
+  case: lubnP=> [y ny0 Py|]; last by case: ifP=> //; rewrite appr_refl.
+  case: lubP=> [xy /(_ xy)|] //.
+  by rewrite appr_refl => /andP [].
+by case: lubnP=> [y ny0 Py|//]; case: eqP.
+Qed.
+
 Definition lub_closure xs :=
   fset (pmap (fun ys => lubn ys) (powerset xs)).
 
@@ -462,49 +478,52 @@ Proof. by rewrite oapprE; case: x. Qed.
 
 End Lifting.
 
-Section Retraction.
+Section Retract.
 
 Variable T : domType.
 Implicit Types (xs : {fset T}) (x y : T).
 
-Definition retraction xs x :=
+Definition retract xs x :=
   lubn (fset [seq y <- xs| y ⊑ x]).
 
-Lemma retraction_appr xs x : retraction xs x ⊑ Some x.
+Lemma retract_appr xs x : retract xs x ⊑ Some x.
 Proof.
-rewrite /retraction oapprE; case: lubnP=> [x' ne0 /(_ x)|] //=.
+rewrite /retract oapprE; case: lubnP=> [x' ne0 /(_ x)|] //=.
 by rewrite all_fset filter_all => <-.
 Qed.
 
-Lemma retraction_lub_closure xs x x' :
-  retraction xs x = Some x' ->
+Lemma retract_lub_closure xs x x' :
+  retract xs x = Some x' ->
   x' \in lub_closure xs.
 Proof.
 move=> e; apply/lub_closureP; exists (fset [seq y <- xs | y ⊑ x])=> //.
 by apply/fsubsetP => y; rewrite in_fset mem_filter => /andP [].
 Qed.
 
-Lemma retraction_idem xs x :
-  obind (retraction xs) (retraction xs x) = retraction xs x.
+Lemma retractS xs ys x :
+  fsubset xs ys ->
+  obind (retract xs) (retract ys x) = retract xs x.
 Proof.
-rewrite /retraction; case: lubnP=> //= x' ne0 Px'.
-apply: appr_lubn.
-  move: ne0; rewrite -!fsubset0; apply: contra; apply: fsubset_trans.
-  apply/fsubsetP => y; rewrite !in_fset !mem_filter.
-  case/andP=> yx in_xs; rewrite in_xs andbT.
-  move: (Px' x'); rewrite appr_refl all_fset.
-  by move/allP; apply; rewrite mem_filter yx.
-move=> y; rewrite all_fset; apply/(sameP allP)/(iffP idP).
-  move=> x'y y'; rewrite mem_filter => /andP [y'x' y'_in_xs].
-  exact: appr_trans y'x' x'y.
-rewrite -Px' => Px; apply/allP=> y'; rewrite in_fset mem_filter.
-case/andP=> [y'x y'_in_xs].
-apply: (Px y'); rewrite mem_filter y'_in_xs andbT.
-move: (Px' x'); rewrite appr_refl => /allP; apply.
-by rewrite in_fset mem_filter y'x.
+rewrite /retract; case: lubnP=> [y ny0 Py|ne] //= /fsubsetP sub.
+  congr lubn; apply/eq_fset=> z; rewrite !in_fset !mem_filter.
+  rewrite [LHS]andbC [RHS]andbC; have [in_xs|] //= := boolP (_ \in xs).
+  move: (Py x); rewrite all_fset filter_all => /esym yx.
+  apply/(sameP idP)/(iffP idP); last by move=> h; apply: (appr_trans h).
+  move=> zx; move: (Py y); rewrite appr_refl => /allP/(_ z).
+  by rewrite in_fset mem_filter zx => /(_ (sub _ in_xs)).
+case: lubnP=> [x' nx'0 Px'|] //=.
+have/ne {ne} Pys: fset [seq y <- ys | y ⊑ x] != fset0.
+  apply: contra nx'0; rewrite -!fsubset0.
+  apply/fsubset_trans/fsubsetP=> y; rewrite !in_fset !mem_filter.
+  by case/andP => -> /sub ->.
+by move/(_ x): Pys; rewrite all_fset filter_all.
 Qed.
 
-End Retraction.
+Lemma retract_idem xs x :
+  obind (retract xs) (retract xs x) = retract xs x.
+Proof. exact/retractS/fsubsetxx. Qed.
+
+End Retract.
 
 Section ProductDomain.
 
@@ -538,3 +557,31 @@ Definition prod_domMixin := DomMixin prod_lubP.
 Canonical prod_domType := Eval hnf in DomType (T * S) prod_domMixin.
 
 End ProductDomain.
+
+Section FunctionDom.
+
+Variables T S : domType.
+Implicit Types (x : T) (y : S) (f g : {fmap T -> S}).
+
+Definition fdapp f x := obind f (retract (domm f) x).
+
+Definition fdeq f g :=
+  all (fun x => fdapp f x == fdapp g x) (lub_closure (domm f :|: domm g)).
+
+Lemma fdeqP f g : reflect (fdapp f =1 fdapp g) (fdeq f g).
+Proof.
+apply(iffP idP); last by by move=> efg; apply/allP=> x _; apply/eqP/efg.
+move=> /allP efg x.
+without loss [y] : f g efg / exists y, fdapp f x = Some y.
+  case ef: (fdapp f x) => [y|] //=; rewrite -ef; first by apply; eauto.
+  case eg: (fdapp g x) => [y|] //=.
+  rewrite -eg => h; apply/esym; apply: h; last by eauto.
+  by move=> x'; rewrite fsetUC eq_sym; eauto.
+rewrite /fdapp.
+rewrite -(retractS x (fsubsetUl (domm f) (domm g))).
+rewrite -(retractS x (fsubsetUr (domm f) (domm g))).
+case e: (retract (_ :|: _) x)=> [x'|] //=.
+by move/(_ _ (retract_lub_closure e))/eqP: efg.
+Qed.
+
+End FunctionDom.
