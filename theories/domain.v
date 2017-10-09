@@ -1070,10 +1070,8 @@ Proof. exact/IncFun.inc_app_inc. Qed.
 Lemma eq_incfun f g : f =1 g <-> f = g.
 Proof.
 split; last by move=> ->.
-case: f g => [f] [g] fg; apply/val_inj=> /=.
-elim/quotP: f fg => /= f ef; elim/quotP: g => /= g eg fg.
-apply/eqmodP/IncFun.inc_eqP=> x; move/(_ x): fg.
-by rewrite /inc_app /= ef eg.
+by move=> fg; apply/anti_appr/andP; split; apply/inc_apprP=> x;
+rewrite fg apprxx.
 Qed.
 
 End IncFunDom.
