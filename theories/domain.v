@@ -758,7 +758,9 @@ Proof. exact: SubDom.lub_val. Qed.
 
 End SubDomTheory.
 
-Section IncFun.
+Module IncFun.
+
+Section Def.
 
 Variable T S : domType.
 Implicit Types (f g : {fmap T -> S}) (x : T).
@@ -835,6 +837,20 @@ move=> gi fi hi /inc_apprP fg /inc_apprP gh.
 apply/inc_apprP=> x; exact: appr_trans (fg x) (gh x).
 Qed.
 
+Lemma inc_app_inc fi gi x1 x2 :
+  inc_appr fi gi -> x1 ⊑ x2 -> inc_app fi x1 ⊑ inc_app gi x2.
+Proof.
+rewrite /inc_app => /inc_apprP figi x1x2.
+apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
+  move: (retract_mono (domm (val fi)) x1x2).
+  case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
+  case e2: (retract (domm (val fi)) x2)=> [x2'|] //=.
+  rewrite oapprE=> x1'x2'.
+  move/increasingP: (valP fi) => [/lub_closed_closure <- inc].
+  exact: (inc x1' x2' (retract_lub_closure e1) (retract_lub_closure e2) x1'x2').
+exact/figi.
+Qed.
+
 Definition inc_eq fi gi := inc_appr fi gi && inc_appr gi fi.
 
 Lemma inc_eqP fi gi : reflect (inc_app fi =1 inc_app gi) (inc_eq fi gi).
@@ -906,15 +922,6 @@ split=> /=.
   elim/quotP: {gq} (val gq) fg=> /= g eg.
   elim/quotP: {fq} (val fq)=> /= f ef.
   rewrite ef eg => efg; exact/eqmodP.
-(* XXX: Maybe move this as a separate lemma *)
-have incP: forall fi x1 x2, x1 ⊑ x2 -> inc_app fi x1 ⊑ inc_app fi x2.
-  move=> fi x1 x2 x1x2; rewrite /inc_app.
-  move: (retract_mono (domm (val fi)) x1x2).
-  case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
-  case e2: (retract (domm (val fi)) x2)=> [x2'|] //=.
-  rewrite oapprE => x1'x2'.
-  move/increasingP: (valP fi) => [/lub_closed_closure <- inc].
-  exact: (inc x1' x2' (retract_lub_closure e1) (retract_lub_closure e2) x1'x2').
 case=> [fq] [gq] [hq] /=.
 elim/quotP: fq => /= fi ef.
 elim/quotP: gq => /= gi eg.
@@ -969,8 +976,8 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     case el2: (inc_app fi x2 ⊔ inc_app gi x2)=> [[l2|]|] //= _.
     move: (is_lub_lub (inc_app fi x1) (inc_app gi x1) (Some l2)).
     rewrite el1 => <- => _; apply/andP; split.
-      exact: (appr_trans (incP fi _ _ x1x2) (lub_apprL el2)).
-    exact: (appr_trans (incP gi _ _ x1x2) (lub_apprR el2)).
+      exact: (appr_trans (inc_app_inc (inc_apprxx fi) x1x2) (lub_apprL el2)).
+    exact: (appr_trans (inc_app_inc (inc_apprxx gi) x1x2) (lub_apprR el2)).
   rewrite (insubT increasing Pfg).
   have {fgE} fgE : forall x, inc_app (Sub fg Pfg) x =
                              odflt None (inc_app fi x ⊔ inc_app gi x).
@@ -1012,4 +1019,61 @@ rewrite (negbTE (incoh hi)); case: insubP=> /= [fgi inc|] //.
 by rewrite (negbTE (incoh fgi)).
 Qed.
 
+End Def.
+
 End IncFun.
+
+Notation "{ 'incfun' T }" := (IncFun.incfun_of (Phant T))
+  (at level 0, format "{ 'incfun'  T }") : type_scope.
+Canonical IncFun.incfun_subType.
+Canonical IncFun.incfun_eqType.
+Canonical IncFun.incfun_choiceType.
+Canonical IncFun.incfun_ordType.
+Canonical IncFun.incfun_of_subType.
+Canonical IncFun.incfun_of_eqType.
+Canonical IncFun.incfun_of_choiceType.
+Canonical IncFun.incfun_of_ordType.
+
+Definition inc_app T S (f : IncFun.incfun T S) x : option S :=
+  IncFun.inc_app (repr (val f)) x.
+Coercion inc_app : IncFun.incfun >-> Funclass.
+
+Section IncFunDom.
+
+Local Open Scope quotient_scope.
+
+Variables T S : domType.
+Implicit Types f g : {incfun T -> S}.
+Implicit Types (x y : T).
+
+Definition inc_appr f g :=
+  IncFun.inc_appr (repr (val f)) (repr (val g)).
+
+Definition inc_lub f g : option {incfun T -> S} :=
+  omap (fun h => IncFun.IncFun (\pi h))
+       (IncFun.inc_lub (repr (val f)) (repr (val g))).
+
+Definition inc_lubP : Dom.axioms inc_appr inc_lub := IncFun.inc_lubP T S.
+
+Definition incfun_domMixin := DomMixin inc_lubP.
+Canonical incfun_domType :=
+  Eval hnf in DomType (IncFun.incfun T S) incfun_domMixin.
+Canonical incfun_of_domType :=
+  Eval hnf in DomType {incfun T -> S} incfun_domMixin.
+
+Lemma inc_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
+Proof. exact/IncFun.inc_apprP. Qed.
+
+Lemma inc_app_inc f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
+Proof. exact/IncFun.inc_app_inc. Qed.
+
+Lemma eq_incfun f g : f =1 g <-> f = g.
+Proof.
+split; last by move=> ->.
+case: f g => [f] [g] fg; apply/val_inj=> /=.
+elim/quotP: f fg => /= f ef; elim/quotP: g => /= g eg fg.
+apply/eqmodP/IncFun.inc_eqP=> x; move/(_ x): fg.
+by rewrite /inc_app /= ef eg.
+Qed.
+
+End IncFunDom.
