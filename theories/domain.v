@@ -1075,3 +1075,40 @@ rewrite fg apprxx.
 Qed.
 
 End IncFunDom.
+
+Section Tagged.
+
+Variables (I : ordType) (T_ : I -> domType).
+Implicit Types u v : {i : I & T_ i}.
+
+Definition tag_appr u v :=
+  (tag u == tag v) && (tagged u ⊑ tagged_as u v).
+
+Definition tag_lub u v :=
+  if tag u == tag v then omap (Tagged T_) (tagged u ⊔ tagged_as u v)
+  else None.
+
+Lemma tag_apprP : Dom.axioms tag_appr tag_lub.
+Proof.
+rewrite /tag_appr /tag_lub; split.
+- by move=> [i x] /=; rewrite eqxx tagged_asE apprxx.
+- move=> [i2 x2] [i1 x1] [i3 x3] /=.
+  case: eqP x2 => //= <- {i2} x2; rewrite tagged_asE.
+  case: eqP x3 => //= <- {i3} x3; rewrite !tagged_asE.
+  exact: appr_trans.
+- move=> [i1 x1] [i2] /=; case: eqP => //= <- {i2} x2.
+  by rewrite !tagged_asE eqxx /= => /anti_appr ->.
+move=> [i1 x1] [i2 x2] [i3] /=.
+case: (altP (i1 =P i2)) x2=> [<- {i2}|i1i2] x2.
+  rewrite tagged_asE; case: (altP (i1 =P i3))=> [<- {i3}|i1i3] //= x3.
+    rewrite !tagged_asE is_lub_lub; case: (x1 ⊔ x2)=> //= x12.
+    by rewrite eqxx tagged_asE.
+  case: (x1 ⊔ x2)=> //= x12; by rewrite (negbTE i1i3).
+by case: (i1 =P i3)=> //= <- x3; rewrite eq_sym (negbTE i1i2) /= andbF.
+Qed.
+
+Definition tag_domMixin := DomMixin tag_apprP.
+Canonical tag_domType :=
+  Eval hnf in DomType {i : I & T_ i} tag_domMixin.
+
+End Tagged.
