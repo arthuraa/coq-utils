@@ -548,7 +548,43 @@ Variable T : domType.
 Implicit Types (xs : {fset T}) (x y : T).
 
 Definition retract xs x :=
-  lubn (fset [seq y <- xs| y ⊑ x]).
+  lubn (fset [seq y <- xs | y ⊑ x]).
+
+CoInductive retract_spec xs x : option T -> Prop :=
+| RetractSome y
+  of y \in lub_closure xs
+  &  (forall z, z \in lub_closure xs -> z ⊑ x = z ⊑ y)
+  :  retract_spec xs x (Some y)
+| RetractNone
+  of (forall z, z \in lub_closure xs -> z ⊑ x = false)
+  :  retract_spec xs x None.
+
+Lemma retractP xs x : retract_spec xs x (retract xs x).
+Proof.
+rewrite /retract; case exs: (lubn _)=> [y|] //; constructor.
+- apply/lub_closureP; eexists; eauto.
+  by apply/fsubsetP=> z; rewrite in_fset mem_filter => /andP [].
+- move=> z /lub_closureP [zs sub ezs]; apply/(sameP idP)/(iffP idP).
+    move: (is_lubn_lubn (fset [seq y <- xs | y ⊑ x]) x).
+    rewrite lubn_neq0 ?exs //= all_fset filter_all => /esym yx.
+    by move=> zy; apply: appr_trans zy yx.
+  move=> zx; have sub' : fsubset zs (fset [seq y <- xs | y ⊑ x]).
+    apply/fsubsetP=> w w_in; rewrite in_fset mem_filter (fsubsetP _ _ sub) //.
+    move: (is_lubn_lubn zs); rewrite ezs lubn_neq0 ?ezs //=.
+    move=> /(_ z); rewrite apprxx => /allP/(_ _ w_in) wz.
+    by rewrite (appr_trans wz zx).
+  by move: (lubnS sub'); rewrite ezs exs.
+move=> z /lub_closureP [zs sub ezs]; apply/negbTE/negP => zx.
+move: (is_lubn_lubn (fset [seq y <- xs | y ⊑ x])); rewrite exs.
+have: fsubset zs (fset [seq y <- xs | y ⊑ x]).
+  apply/fsubsetP=> w w_in; rewrite in_fset mem_filter (fsubsetP _ _ sub) //.
+  move: (is_lubn_lubn zs); rewrite ezs lubn_neq0 ?ezs //=.
+  move=> /(_ z); rewrite apprxx => /allP/(_ _ w_in) wz.
+  by rewrite (appr_trans wz zx).
+case: (_ =P fset0) => [->|_] /=.
+  by rewrite fsubset0 -[_ == fset0]negbK lubn_neq0 ?ezs.
+by move=> sub' /(_ x); rewrite all_fset filter_all.
+Qed.
 
 Lemma retract_appr xs x : retract xs x ⊑ Some x.
 Proof.
@@ -829,6 +865,9 @@ Proof. apply/lub_closedP/eqP; exact: (valP xs). Qed.
 
 Canonical lcset_sub_subDomType :=
   Eval hnf in SubDomType lcset_sub lcset_subP.
+Definition lcset_sub_domMixin := [domMixin of lcset_sub by <:].
+Canonical lcset_sub_domType :=
+  Eval hnf in DomType lcset_sub lcset_sub_domMixin.
 
 End LCSubDom.
 
@@ -1188,3 +1227,77 @@ Canonical tag_domType :=
   Eval hnf in DomType {i : I & T_ i} tag_domMixin.
 
 End Tagged.
+
+Section InverseLimit.
+
+Implicit Types T S U : domType.
+
+Record embedding T S := Embedding {
+  emb_app  :> T -> S;
+  emb_ret  :  S -> option T;
+  emb_appK :  pcancel emb_app emb_ret;
+  emb_retP :  forall x y, emb_app x ⊑ y = Some x ⊑ emb_ret y
+}.
+Definition embedding_of T S of phant (T -> S) := embedding T S.
+Identity Coercion embedding_of_embedding : embedding_of >-> embedding.
+
+Notation "{ 'emb' T }" := (embedding_of (Phant T))
+  (at level 0, format "{ 'emb'  T }") : type_scope.
+
+Notation "e '^r'" := (emb_ret e)
+  (at level 3, no associativity, format "e ^r") : dom_scope.
+
+Lemma emb_appr T S (e : {emb T -> S}) x y : x ⊑ y = e x ⊑ e y.
+Proof. by rewrite emb_retP emb_appK. Qed.
+
+Program Definition emb_id (T : domType) : {emb T -> T} := {|
+  emb_app x := x;
+  emb_ret x := Some x
+|}.
+
+Next Obligation. by move. Qed.
+
+Program Definition emb_comp (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S})
+  : {emb T -> U} := {|
+  emb_app x := e1 (e2 x);
+  emb_ret y := obind e2^r (e1^r y)
+|}.
+
+Next Obligation.
+by move=> x; rewrite emb_appK /= emb_appK.
+Qed.
+
+Next Obligation.
+rewrite emb_retP; case: (e1^r y)=> [z|] //=.
+by rewrite oapprE emb_retP.
+Qed.
+
+Program Definition emb_retr (T : domType) (sT : {lcset T}) : {emb sT -> T} :=
+{|
+  emb_app x := val x;
+  emb_ret x := obind insub (retract sT x)
+|}.
+
+Next Obligation.
+move=> x; rewrite retractK /= ?valK //.
+move/eqP: (valP sT) => /= ->; exact: valP.
+Qed.
+
+Next Obligation.
+case: retractP => [z|]; move/eqP: (valP sT) => -> /=.
+  move=> z_in -> /=; last exact: (valP x).
+  by rewrite insubT.
+move=> -> //; exact: (valP x).
+Qed.
+
+Record functor := Functor {
+  f_obj  : domType -> domType;
+  f_mor  : forall T S : domType, {emb T -> S} -> {emb f_obj T -> f_obj S};
+  f_ext  : forall (T S : domType) (e1 e2 : {emb T -> S}),
+             e1 =1 e2 -> f_mor e1 =1 f_mor e2;
+  f_id   : forall T, f_mor (emb_id T) =1 emb_id (f_obj T);
+  f_comp : forall (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S}),
+             f_mor (emb_comp e1 e2) =1 emb_comp (f_mor e1) (f_mor e2)
+}.
+
+End InverseLimit.
