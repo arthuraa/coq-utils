@@ -280,10 +280,12 @@ rewrite /lub_closure in_fset mem_pmap; apply/(iffP mapP)=> /=.
 by case=> /= ys sub lub; exists ys; rewrite ?lub ?powersetE.
 Qed.
 
-Definition lub_closed xs :=
-  {in xs &, forall x1 x2 x12, x1 ⊔ x2 = Some x12 -> x12 \in xs}.
+(* FIXME: Try to clean up closure lemmas *)
 
-Lemma lub_closure_closed xs : lub_closed (lub_closure xs).
+Definition lub_closed (P : pred T) :=
+  {in P &, forall x1 x2 x12, x1 ⊔ x2 = Some x12 -> x12 \in P}.
+
+Lemma lub_closure_closed xs : lub_closed (mem (lub_closure xs)).
 Proof.
 move=> x1 x2 /lub_closureP [ys1 sub1 e1] /lub_closureP [ys2 sub2 e2] x12 h.
 apply/lub_closureP; exists (ys1 :|: ys2); first by rewrite fsubUset sub1.
@@ -291,7 +293,7 @@ by rewrite lubnU e1 e2.
 Qed.
 
 Lemma lub_closure_min xs ys :
-  fsubset xs ys -> lub_closed ys -> fsubset (lub_closure xs) ys.
+  fsubset xs ys -> lub_closed (mem ys) -> fsubset (lub_closure xs) ys.
 Proof.
 move=> /fsubsetP sub ysP; apply/fsubsetP=> /= x /lub_closureP [zs sub' xP].
 elim/fset_ind: zs x sub' xP => [//|x zs _ IH y].
@@ -308,7 +310,7 @@ rewrite /lub_closure in_fset mem_pmap.
 by apply/mapP; exists (fset1 x).
 Qed.
 
-Lemma lub_closed_closure xs : lub_closed xs -> lub_closure xs = xs.
+Lemma lub_closed_closure xs : lub_closed (mem xs) -> lub_closure xs = xs.
 Proof.
 move=> closed; apply/eqP; rewrite eqEfsubset lub_closure_ext andbT.
 apply: lub_closure_min => //; exact: fsubsetxx.
@@ -335,7 +337,55 @@ apply/(sameP idP)/(iffP idP); last exact: fsubset_trans (lub_closure_ext xs).
 by rewrite -{2}(lub_closure_idem ys); apply: lub_closure_inc.
 Qed.
 
+Lemma lub_closedP xs : lub_closed (mem xs) <-> lub_closure xs = xs.
+Proof.
+split; first exact: lub_closed_closure.
+move=> <-; exact: lub_closure_closed.
+Qed.
+
+Lemma lub_closure0 : lub_closure fset0 = fset0.
+Proof. by rewrite /lub_closure powerset0 /= fset0E. Qed.
+
+Lemma lub_closure1 x : lub_closure (fset1 x) = fset1 x.
+Proof.
+apply/lub_closed_closure=> x1 x2; rewrite !in_fset1.
+by move=> /eqP -> /eqP ->; rewrite lubxx => _ [<-]; rewrite in_fset1.
+Qed.
+
+(* FIXME: This probably needs a better name *)
+Record lcset := LCSet {
+  lcval :> {fset T};
+  _     :  lub_closure lcval == lcval
+}.
+Definition lcset_of of phant T := lcset.
+Identity Coercion lcset_of_lcset : lcset_of >-> lcset.
+
+Canonical lcset_subType := [subType for lcval].
+Definition lcset_eqMixin := [eqMixin of lcset by <:].
+Canonical lcset_eqType := Eval hnf in EqType lcset lcset_eqMixin.
+Definition lcset_choiceMixin := [choiceMixin of lcset by <:].
+Canonical lcset_choiceType := Eval hnf in ChoiceType lcset lcset_choiceMixin.
+Definition lcset_ordMixin := [ordMixin of lcset by <:].
+Canonical lcset_ordType := Eval hnf in OrdType lcset lcset_ordMixin.
+
+Canonical lcset_of_eqType := [eqType of lcset_of (Phant T)].
+Canonical lcset_of_choiceType := [choiceType of lcset_of (Phant T)].
+Canonical lcset_of_ordType := [ordType of lcset_of (Phant T)].
+
+Program Definition lcset0 := @LCSet fset0 _.
+Next Obligation. by rewrite lub_closure0. Qed.
+Program Definition lcset1 x := @LCSet (fset1 x) _.
+Next Obligation. by rewrite lub_closure1. Qed.
+
 End Theory.
+
+Notation "{ 'lcset' T }" := (lcset_of (Phant T))
+  (at level 0, format "{ 'lcset'  T }") : type_scope.
+
+Definition pred_of_lcset (T : domType) (xs : lcset T) :=
+  [pred x : T | x \in val xs].
+Canonical lcset_predType T := mkPredType (@pred_of_lcset T).
+Canonical lcset_of_predType (T : domType) := [predType of {lcset T}].
 
 Module Discrete.
 
@@ -693,12 +743,9 @@ Section ClassDef.
 
 Variables (T : domType) (P : pred T).
 
-Definition axiom :=
-  forall x y z : T, P x -> P y -> x ⊔ y = Some z -> P z.
-
 Record type := Pack {
   sort : subType P;
-  _    : axiom
+  _    : lub_closed P
 }.
 
 Local Coercion sort : type >-> subType.
@@ -715,7 +762,7 @@ Lemma lub_val x y : val x ⊔ val y = omap val (subType_lub x y).
 Proof.
 rewrite /subType_lub; case: sT x y => /= S SP x y.
 case e: lub => [z|] //=.
-by rewrite (insubT P (SP _ _ _ (valP x) (valP y) e)) /= SubK.
+by rewrite (insubT P (SP _ _ (valP x) (valP y) _ e)) /= SubK.
 Qed.
 
 Lemma subTypeP : Dom.axioms subType_appr subType_lub.
@@ -758,6 +805,35 @@ Proof. exact: SubDom.lub_val. Qed.
 
 End SubDomTheory.
 
+Section LCSubDom.
+
+Variables (T : domType) (xs : lcset T).
+
+Structure lcset_sub := LCSetSub {
+  lcsetval :> T;
+  _        :  lcsetval \in xs
+}.
+
+Canonical lcset_sub_subType := [subType for lcsetval].
+Definition lcset_sub_eqMixin := [eqMixin of lcset_sub by <:].
+Canonical lcset_sub_eqType := Eval hnf in EqType lcset_sub lcset_sub_eqMixin.
+Definition lcset_sub_choiceMixin := [choiceMixin of lcset_sub by <:].
+Canonical lcset_sub_choiceType :=
+  Eval hnf in ChoiceType lcset_sub lcset_sub_choiceMixin.
+Definition lcset_sub_ordMixin := [ordMixin of lcset_sub by <:].
+Canonical lcset_sub_ordType :=
+  Eval hnf in OrdType lcset_sub lcset_sub_ordMixin.
+
+Lemma lcset_subP : lub_closed (mem xs).
+Proof. apply/lub_closedP/eqP; exact: (valP xs). Qed.
+
+Canonical lcset_sub_subDomType :=
+  Eval hnf in SubDomType lcset_sub lcset_subP.
+
+End LCSubDom.
+
+Coercion lcset_sub : lcset >-> Sortclass.
+
 Module IncFun.
 
 Section Def.
@@ -773,13 +849,13 @@ Definition increasing f :=
                       x2 <- lub_closure (domm f) ].
 
 Lemma increasingP f :
-  reflect (lub_closed (domm f)
+  reflect (lub_closed (mem (domm f))
            /\ {in domm f &, forall x1 x2, x1 ⊑ x2 -> f x1 ⊑ f x2})
           (increasing f).
 Proof.
 apply/(iffP allP)=> /= [inc | [clos inc]].
   have/fsubsetP ext := lub_closure_ext (domm f).
-  have clos : lub_closed (domm f); last split=> //.
+  have clos : lub_closed (mem (domm f)); last split=> //.
     move=> x1 x2 /dommP [y1 e1] /dommP [y2 e2] x12 e12.
     have/inc/implyP/(_ (lub_apprL e12)):
       (x1, x12) \in [seq (x1, x12) | x1  <- lub_closure (domm f),
