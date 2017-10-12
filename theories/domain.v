@@ -2,8 +2,7 @@ From mathcomp
 Require Import
   ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype generic_quotient.
 
-
-Require Import ord fset fmap.
+Require Import void ord fset fmap.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -474,8 +473,11 @@ End Discrete.
 
 Export Discrete.Exports.
 
+Canonical void_domType := [domType for void by //].
+Canonical void_discDomType := [discDomType for void].
+
 Canonical nat_domType := [domType for nat by //].
-Canonical nat_discDomMixin := [discDomType for nat].
+Canonical nat_discDomType := [discDomType for nat].
 
 Canonical bool_domType := [domType for bool by //].
 Canonical bool_discDomType := [discDomType for bool].
@@ -1250,14 +1252,14 @@ Notation "e '^r'" := (emb_ret e)
 Lemma emb_appr T S (e : {emb T -> S}) x y : x ⊑ y = e x ⊑ e y.
 Proof. by rewrite emb_retP emb_appK. Qed.
 
-Program Definition emb_id (T : domType) : {emb T -> T} := {|
+Program Definition emb_id T : {emb T -> T} := {|
   emb_app x := x;
   emb_ret x := Some x
 |}.
 
 Next Obligation. by move. Qed.
 
-Program Definition emb_comp (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S})
+Program Definition emb_comp T S U (e1 : {emb S -> U}) (e2 : {emb T -> S})
   : {emb T -> U} := {|
   emb_app x := e1 (e2 x);
   emb_ret y := obind e2^r (e1^r y)
@@ -1272,7 +1274,10 @@ rewrite emb_retP; case: (e1^r y)=> [z|] //=.
 by rewrite oapprE emb_retP.
 Qed.
 
-Program Definition emb_retr (T : domType) (sT : {lcset T}) : {emb sT -> T} :=
+Local Notation "e · e'" := (emb_comp e e')
+  (at level 40, left associativity).
+
+Program Definition emb_retr T (sT : {lcset T}) : {emb sT -> T} :=
 {|
   emb_app x := val x;
   emb_ret x := obind insub (retract sT x)
@@ -1290,14 +1295,113 @@ case: retractP => [z|]; move/eqP: (valP sT) => -> /=.
 move=> -> //; exact: (valP x).
 Qed.
 
+Program Definition emb0 T : {emb void -> T} := {|
+  emb_app x := match x return T with end;
+  emb_ret x := None
+|}.
+
+Next Obligation. by case. Qed.
+Next Obligation. by case: x. Qed.
+
 Record functor := Functor {
-  f_obj  : domType -> domType;
-  f_mor  : forall T S : domType, {emb T -> S} -> {emb f_obj T -> f_obj S};
-  f_ext  : forall (T S : domType) (e1 e2 : {emb T -> S}),
-             e1 =1 e2 -> f_mor e1 =1 f_mor e2;
-  f_id   : forall T, f_mor (emb_id T) =1 emb_id (f_obj T);
-  f_comp : forall (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S}),
-             f_mor (emb_comp e1 e2) =1 emb_comp (f_mor e1) (f_mor e2)
+  f_obj  :> domType -> domType;
+  f_mor  :  forall T S : domType, {emb T -> S} -> {emb f_obj T -> f_obj S};
+  f_ext  :  forall (T S : domType) (e1 e2 : {emb T -> S}),
+              e1 =1 e2 -> f_mor e1 =1 f_mor e2;
+  f_id   :  forall T, f_mor (emb_id T) =1 emb_id (f_obj T);
+  f_comp :  forall (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S}),
+              f_mor (emb_comp e1 e2) =1 emb_comp (f_mor e1) (f_mor e2);
+  f_cont :  forall (T : domType) (x : f_obj T),
+            exists (p : {sT : {lcset T} & f_obj [domType of sT]}),
+              x == f_mor (emb_retr (tag p)) (tagged p)
 }.
+
+Variable F : functor.
+
+Fixpoint chain n : domType :=
+  if n is n.+1 then F (chain n) else [domType of void].
+
+Program Definition cast n m (e : n = m) : {emb chain n -> chain m} := nosimpl {|
+  emb_app x := eq_rect _ chain x _ e;
+  emb_ret x := Some (eq_rect _ chain x _ (esym e))
+|}.
+
+Next Obligation. by []. Qed.
+
+Fixpoint chain_mor1 n : {emb chain n -> chain n.+1} :=
+  if n is n.+1 then f_mor F (chain_mor1 n) else emb0 (chain 1).
+
+Fixpoint chain_mor_rec m n : {emb chain n -> chain (m + n)} :=
+  if m is m.+1 then chain_mor1 (m + n) · chain_mor_rec m n
+  else emb_id (chain n).
+
+Definition chain_mor m n (p : m <= n) : {emb chain m -> chain n} :=
+  cast (subnK p) · chain_mor_rec (n - m) m.
+
+Lemma chain_mor0 n (p : n <= n) : chain_mor p =1 emb_id (chain n).
+Proof.
+rewrite /chain_mor; move: (subnK p) => {p}; rewrite subnn /=.
+by move=> p; rewrite eq_axiomK /=.
+Qed.
+
+Local Notation "D_∞" := {n : nat & chain n}.
+
+Definition bump (x : D_∞) : D_∞ :=
+  Tagged chain (chain_mor1 _ (tagged x)).
+
+Definition unbump (x : D_∞) : option D_∞ :=
+  match tag x as n return chain n -> option D_∞ with
+  | 0    => fun _ => None
+  | n.+1 => fun x => omap (Tagged chain) ((chain_mor1 n)^r x)
+  end (tagged x).
+
+Lemma bumpK : pcancel bump unbump.
+Proof.
+by rewrite /bump /unbump; move=> [n x] /=; rewrite emb_appK.
+Qed.
+
+Lemma bump_inj : injective bump.
+Proof. apply/pcan_inj/bumpK. Qed.
+
+Lemma iter_inj S n (f : S -> S) : injective f -> injective (iter n f).
+Proof.
+by move=> inj; elim: n => [|n IH] x1 x2 //= /inj/IH.
+Qed.
+
+Definition invlim_eq (x y : D_∞) : bool :=
+  iter (tag y - tag x) bump x == iter (tag x - tag y) bump y.
+
+Lemma invlim_eqE x y c :
+  (tag x <= c) && (tag y <= c) ->
+  invlim_eq x y = (iter (c - tag x) bump x == iter (c - tag y) bump y).
+Proof.
+rewrite /invlim_eq -geq_max => e.
+rewrite -(subnK e) -!addnBA ?(leq_maxl, leq_maxr) // !iter_add.
+by rewrite (inj_eq (iter_inj bump_inj)) {1}maxnE addKn maxnC maxnE addKn.
+Qed.
+
+Lemma invlim_eq_refl : reflexive invlim_eq.
+Proof. by move=> x; rewrite /invlim_eq /= subnn. Qed.
+
+Lemma invlim_eq_sym : symmetric invlim_eq.
+Proof. by move=> x y; rewrite /invlim_eq eq_sym. Qed.
+
+Lemma invlim_eq_trans : transitive invlim_eq.
+Proof.
+move=> y x z.
+pose c := maxn (tag x) (maxn (tag y) (tag z)).
+have xc : tag x <= c by rewrite leq_maxl.
+have yc : tag y <= c by rewrite /c (maxnC (tag y)) maxnA leq_maxr.
+have zc : tag z <= c by rewrite /c maxnA leq_maxr.
+rewrite !(@invlim_eqE _ _ c) ?xc ?yc ?zc //.
+by move=> /eqP -> /eqP ->.
+Qed.
+
+Canonical invlim_eq_equiv :=
+  EquivRel invlim_eq invlim_eq_refl invlim_eq_sym invlim_eq_trans.
+
+Local Open Scope quotient_scope.
+
+Definition D_infty := {eq_quot invlim_eq}.
 
 End InverseLimit.
