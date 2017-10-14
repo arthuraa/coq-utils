@@ -434,7 +434,10 @@ Qed.
 
 Canonical qdom_eq_equiv := EquivRelPack qdom_eqP.
 
-Implicit Types qx qy : {eq_quot qdom_eq}.
+Definition type := {eq_quot qdom_eq}.
+Definition type_of of phantom (rel T) qappr := type.
+
+Implicit Types qx qy : type.
 
 Definition qdom_appr qx qy := qappr (repr qx) (repr qy).
 Definition qdom_lub qx qy : option {eq_quot qdom_eq} :=
@@ -455,16 +458,35 @@ case: piP=> /= xy' /eqmodP/andP [l1 l2].
 apply/(sameP idP)/(iffP idP); [move: l1|move: l2]; exact: qappr_trans.
 Qed.
 
+Canonical qdom_eqType := Eval hnf in [eqType of type].
+Canonical qdom_choiceType := Eval hnf in [choiceType of type].
+Canonical qdom_ordType := Eval hnf in [ordType of type].
 Definition qdom_domMixin := DomMixin qdom_lubP.
+Canonical qdom_domType := Eval hnf in DomType type qdom_domMixin.
 
-Canonical qdom_domType :=
-  Eval hnf in DomType {eq_quot qdom_eq} qdom_domMixin.
+Canonical qdom_of_eqType := Eval hnf in [eqType of type_of (Phantom _ _)].
+Canonical qdom_of_choiceType :=
+  Eval hnf in [choiceType of type_of (Phantom _ _)].
+Canonical qdom_of_ordType := Eval hnf in [ordType of type_of (Phantom _ _)].
+Canonical qdom_of_domType := Eval hnf in [domType of type_of (Phantom _ _)].
 
 End Dom.
 
 End QDom.
 
+Notation "{ 'qdom' T }" :=
+  (QDom.type_of (Phantom (rel _) T))
+  (at level 0, format "{ 'qdom'  T }") : type_scope.
+
+Canonical QDom.qdom_eqType.
+Canonical QDom.qdom_choiceType.
+Canonical QDom.qdom_ordType.
 Canonical QDom.qdom_domType.
+
+Canonical QDom.qdom_of_eqType.
+Canonical QDom.qdom_of_choiceType.
+Canonical QDom.qdom_of_ordType.
+Canonical QDom.qdom_of_domType.
 
 Module Discrete.
 
@@ -1074,29 +1096,6 @@ Qed.
 Definition inc_eq_equiv :=
   Eval hnf in EquivRel inc_eq inc_eqxx inc_eq_sym inc_eq_trans.
 
-CoInductive incfun := IncFun {
-  ifval :> {eq_quot inc_eq_equiv}
-}.
-Definition incfun_of of phant (T -> S) := incfun.
-Identity Coercion type_of_incfun_of : incfun_of >-> incfun.
-
-Canonical incfun_subType := [newType for ifval].
-Definition incfun_eqMixin := [eqMixin of incfun by <:].
-Canonical incfun_eqType := Eval hnf in EqType incfun incfun_eqMixin.
-Definition incfun_choiceMixin := [choiceMixin of incfun by <:].
-Canonical incfun_choiceType :=
-  Eval hnf in ChoiceType incfun incfun_choiceMixin.
-Definition incfun_ordMixin := [ordMixin of incfun by <:].
-Canonical incfun_ordType :=
-  Eval hnf in OrdType incfun incfun_ordMixin.
-
-Canonical incfun_of_subType := [subType of incfun_of (Phant _)].
-Canonical incfun_of_eqType := [eqType of incfun_of (Phant _)].
-Canonical incfun_of_choiceType := [choiceType of incfun_of (Phant _)].
-Canonical incfun_of_ordType := [ordType of incfun_of (Phant _)].
-
-Implicit Types fq gq : incfun.
-
 Notation pinc_lub fi gi :=
   (mkfmapfp (fun x => odflt None (inc_app fi x ⊔ inc_app gi x))
             (lub_closure (domm (val fi) :|: domm (val gi)))).
@@ -1107,23 +1106,12 @@ Definition inc_lub fi gi : option {f | increasing f} :=
     else None
   else None.
 
-Lemma inc_lubP :
-  Dom.axioms (fun fq gq => inc_appr (repr (val fq)) (repr (val gq)))
-             (fun fq gq => omap (fun h => IncFun (\pi h))
-                                (inc_lub (repr (val fq)) (repr (val gq)))).
+Lemma inc_lubP : QDom.axioms inc_appr inc_lub.
 Proof.
 split=> /=.
 - move=> fq; exact: inc_apprxx.
 - move=> gq fq hq; exact: inc_appr_trans.
-- move=> fq gq fg; apply/val_inj=> /=.
-  elim/quotP: {gq} (val gq) fg=> /= g eg.
-  elim/quotP: {fq} (val fq)=> /= f ef.
-  rewrite ef eg => efg; exact/eqmodP.
-case=> [fq] [gq] [hq] /=.
-elim/quotP: fq => /= fi ef.
-elim/quotP: gq => /= gi eg.
-elim/quotP: hq => /= hi eh.
-rewrite ef eg eh /= /inc_lub /=.
+move=> fi gi hi; rewrite /inc_lub /=.
 set clos := lub_closure (domm (val fi) :|: domm (val gi)).
 set fg   := mkfmapfp _ clos.
 have e :
@@ -1192,11 +1180,6 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     move: (coh x').
     case ey: lub=> [y|] //= _.
     exact: (lub_apprR ey).
-  have -> :
-    inc_appr (repr (\pi_{eq_quot inc_eq_equiv} fgi)) hi = inc_appr fgi hi.
-    case: piP=> /= fgi' /eqmodP/inc_eqP e.
-    by apply/(sameP (inc_apprP _ _))/(iffP (inc_apprP _ _))=> ??;
-    rewrite ?e // -?e //.
   apply/(sameP andP)/(iffP (inc_apprP _ _)).
     move=> fgi_hi; split; apply/allP=> x in_clos.
       move: (is_lub_lub (inc_app fi x) (inc_app gi x) (inc_app hi x)).
@@ -1216,24 +1199,53 @@ rewrite (negbTE (incoh hi)); case: insubP=> /= [fgi inc|] //.
 by rewrite (negbTE (incoh fgi)).
 Qed.
 
+Canonical incfun_predom := Eval hnf in QDom.PreDom inc_lubP.
+
+(* FIXME: Using a regular definition here makes it harder for Coq to figure out
+   that the coercion into functions below is valid. *)
+
+(*CoInductive type := IncFun {
+  quot_of_incfun : {qdom inc_appr}
+}.*)
+Definition type := {qdom inc_appr}.
+Definition type_of of phant (T -> S) := type.
+Identity Coercion type_of_type : type_of >-> type.
+
 End Def.
+
+Module Exports.
+
+Notation "{ 'incfun' T }" := (IncFun.type_of (Phant T))
+  (at level 0, format "{ 'incfun'  T }") : type_scope.
+
+Section WithVar.
+
+Variables T S : domType.
+
+Canonical incfun_eqType := Eval hnf in [eqType of IncFun.type T S].
+Canonical incfun_choiceType := Eval hnf in [choiceType of IncFun.type T S].
+Canonical incfun_ordType := Eval hnf in [ordType of IncFun.type T S].
+Canonical incfun_domType := Eval hnf in [domType of IncFun.type T S].
+
+Canonical incfun_of_eqType := Eval hnf in [eqType of {incfun T -> S}].
+Canonical incfun_of_choiceType := Eval hnf in [choiceType of {incfun T -> S}].
+Canonical incfun_of_ordType := Eval hnf in [ordType of {incfun T -> S}].
+Canonical incfun_of_domType := Eval hnf in [domType of {incfun T -> S}].
+
+End WithVar.
+
+End Exports.
 
 End IncFun.
 
-Notation "{ 'incfun' T }" := (IncFun.incfun_of (Phant T))
-  (at level 0, format "{ 'incfun'  T }") : type_scope.
-Canonical IncFun.incfun_subType.
-Canonical IncFun.incfun_eqType.
-Canonical IncFun.incfun_choiceType.
-Canonical IncFun.incfun_ordType.
-Canonical IncFun.incfun_of_subType.
-Canonical IncFun.incfun_of_eqType.
-Canonical IncFun.incfun_of_choiceType.
-Canonical IncFun.incfun_of_ordType.
+Export IncFun.Exports.
 
-Definition inc_app T S (f : IncFun.incfun T S) x : option S :=
-  IncFun.inc_app (repr (val f)) x.
-Coercion inc_app : IncFun.incfun >-> Funclass.
+Definition inc_app (T S : domType) (f : IncFun.type T S) x : option S :=
+  IncFun.inc_app (repr f) x.
+
+Coercion inc_app : IncFun.type >-> Funclass.
+(* This seems to be needed here *)
+Identity Coercion incfun_of_incfun : IncFun.type_of >-> IncFun.type.
 
 Section IncFunDom.
 
@@ -1242,21 +1254,6 @@ Local Open Scope quotient_scope.
 Variables T S : domType.
 Implicit Types f g : {incfun T -> S}.
 Implicit Types (x y : T).
-
-Definition inc_appr f g :=
-  IncFun.inc_appr (repr (val f)) (repr (val g)).
-
-Definition inc_lub f g : option {incfun T -> S} :=
-  omap (fun h => IncFun.IncFun (\pi h))
-       (IncFun.inc_lub (repr (val f)) (repr (val g))).
-
-Definition inc_lubP : Dom.axioms inc_appr inc_lub := IncFun.inc_lubP T S.
-
-Definition incfun_domMixin := DomMixin inc_lubP.
-Canonical incfun_domType :=
-  Eval hnf in DomType (IncFun.incfun T S) incfun_domMixin.
-Canonical incfun_of_domType :=
-  Eval hnf in DomType {incfun T -> S} incfun_domMixin.
 
 Lemma inc_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
 Proof. exact/IncFun.inc_apprP. Qed.
@@ -1331,6 +1328,12 @@ Notation "e '^r'" := (emb_ret e)
 
 Lemma emb_appr T S (e : {emb T -> S}) x y : x ⊑ y = e x ⊑ e y.
 Proof. by rewrite emb_retP emb_appK. Qed.
+
+Lemma emb_lub T S (e : {emb T -> S}) x y : e x ⊔ e y = omap e (x ⊔ y).
+Proof.
+by apply/esym/lub_unique=> z; case: (lubP x y)=> [xy Pxy|] /=;
+rewrite !emb_retP; case: (e^r z)=> [z'|] //=; rewrite !oapprE.
+Qed.
 
 Program Definition emb_id T : {emb T -> T} := {|
   emb_app x := x;
@@ -1424,15 +1427,14 @@ rewrite /chain_mor; move: (subnK p) => {p}; rewrite subnn /=.
 by move=> p; rewrite eq_axiomK /=.
 Qed.
 
-Local Notation "D_∞" := {n : nat & chain n}.
+Implicit Types x y : {n : nat & chain n}.
 
-Definition bump (x : D_∞) : D_∞ :=
-  Tagged chain (chain_mor1 _ (tagged x)).
+Definition bump x := Tagged chain (chain_mor1 _ (tagged x)).
 
-Definition unbump (x : D_∞) : option D_∞ :=
-  match tag x as n return chain n -> option D_∞ with
+Definition unbump x :=
+  match tag x as n return chain n -> option {n : nat & chain n} with
   | 0    => fun _ => None
-  | n.+1 => fun x => omap (Tagged chain) ((chain_mor1 n)^r x)
+  | n.+1 => fun a => omap (Tagged chain) ((chain_mor1 n)^r a)
   end (tagged x).
 
 Lemma bumpK : pcancel bump unbump.
@@ -1443,38 +1445,59 @@ Qed.
 Lemma bump_inj : injective bump.
 Proof. apply/pcan_inj/bumpK. Qed.
 
+Lemma bump_appr x y : x ⊑ y = bump x ⊑ bump y.
+Proof.
+rewrite /appr /= /tag_appr /bump; case: x y => [n x] [m] /=.
+rewrite eqSS; case: eqP => [<-|//] /= y.
+rewrite !tagged_asE; exact: emb_appr.
+Qed.
+
 Lemma iter_inj S n (f : S -> S) : injective f -> injective (iter n f).
 Proof.
 by move=> inj; elim: n => [|n IH] x1 x2 //= /inj/IH.
 Qed.
 
-Definition invlim_eq (x y : D_∞) : bool :=
-  iter (tag y - tag x) bump x == iter (tag x - tag y) bump y.
+Definition invlim_appr x y : bool :=
+  iter (tag y - tag x) bump x ⊑ iter (tag x - tag y) bump y.
 
-Lemma invlim_eqE x y c :
+Lemma invlim_apprE x y c :
   (tag x <= c) && (tag y <= c) ->
-  invlim_eq x y = (iter (c - tag x) bump x == iter (c - tag y) bump y).
+  invlim_appr x y = (iter (c - tag x) bump x ⊑ iter (c - tag y) bump y).
 Proof.
-rewrite /invlim_eq -geq_max => e.
+rewrite /invlim_appr -geq_max => e.
 rewrite -(subnK e) -!addnBA ?(leq_maxl, leq_maxr) // !iter_add.
-by rewrite (inj_eq (iter_inj bump_inj)) {1}maxnE addKn maxnC maxnE addKn.
+rewrite {2}maxnE addKn {3}maxnC (maxnE (tag y)) addKn.
+move: {x y e} (iter _ _ x) (iter _ _ y) (c - _) => x y.
+elim=> //= k ->; exact: bump_appr.
 Qed.
 
-Lemma invlim_eq_refl : reflexive invlim_eq.
-Proof. by move=> x; rewrite /invlim_eq /= subnn. Qed.
+Lemma invlim_appr_refl : reflexive invlim_appr.
+Proof. by move=> x; rewrite /invlim_appr /= subnn apprxx. Qed.
 
-Lemma invlim_eq_sym : symmetric invlim_eq.
-Proof. by move=> x y; rewrite /invlim_eq eq_sym. Qed.
-
-Lemma invlim_eq_trans : transitive invlim_eq.
+Lemma invlim_appr_trans : transitive invlim_appr.
 Proof.
 move=> y x z.
 pose c := maxn (tag x) (maxn (tag y) (tag z)).
 have xc : tag x <= c by rewrite leq_maxl.
 have yc : tag y <= c by rewrite /c (maxnC (tag y)) maxnA leq_maxr.
 have zc : tag z <= c by rewrite /c maxnA leq_maxr.
-rewrite !(@invlim_eqE _ _ c) ?xc ?yc ?zc //.
-by move=> /eqP -> /eqP ->.
+rewrite !(@invlim_apprE _ _ c) ?xc ?yc ?zc //.
+exact: appr_trans.
+Qed.
+
+Definition invlim_eq x y := invlim_appr x y && invlim_appr y x.
+
+Lemma invlim_eq_refl : reflexive invlim_eq.
+Proof. by move=> x; rewrite /invlim_eq invlim_appr_refl. Qed.
+
+Lemma invlim_eq_sym : symmetric invlim_eq.
+Proof. by move=> x y; rewrite /invlim_eq andbC. Qed.
+
+Lemma invlim_eq_trans : transitive invlim_eq.
+Proof.
+move=> y x z /andP [xy yx] /andP [yz zy]; apply/andP; split.
+  exact: invlim_appr_trans xy yz.
+exact: invlim_appr_trans zy yx.
 Qed.
 
 Canonical invlim_eq_equiv :=
@@ -1482,6 +1505,41 @@ Canonical invlim_eq_equiv :=
 
 Local Open Scope quotient_scope.
 
-Definition D_infty := {eq_quot invlim_eq}.
+CoInductive mu := Mu {
+  quot_of_mu : {eq_quot invlim_eq}
+}.
+
+Canonical mu_newType := [newType for quot_of_mu].
+Definition mu_eqMixin := [eqMixin of mu by <:].
+Canonical mu_eqType := Eval hnf in EqType mu mu_eqMixin.
+Definition mu_choiceMixin := [choiceMixin of mu by <:].
+Canonical mu_choiceType := Eval hnf in ChoiceType mu mu_choiceMixin.
+Definition mu_ordMixin := [ordMixin of mu by <:].
+Canonical mu_ordType := Eval hnf in OrdType mu mu_ordMixin.
+
+Implicit Types qx qy : mu.
+
+Definition mu_appr qx qy :=
+  invlim_appr (repr (val qx)) (repr (val qy)).
+
+Definition mu_lub qx qy :=
+  let x := repr (val qx) in
+  let y := repr (val qy) in
+  omap (fun a => Mu (\pi a))
+       (iter (tag y - tag x) bump x ⊔ iter (tag x - tag y) bump y).
+
+Lemma mu_lubP : Dom.axioms mu_appr mu_lub.
+Proof.
+rewrite /mu_appr /mu_lub; split.
+- move=> qx; exact: invlim_appr_refl.
+- move=> qy qx qz; exact: invlim_appr_trans.
+- move=> [qx] [qy] /= xy; apply/val_inj=> /=.
+  elim/quotP: qy xy=> /= y ey; elim/quotP: qx=> /= x ex.
+  rewrite ex ey => exy; exact/eqmodP.
+move=> [qx] [qy] [qz] /=.
+elim/quotP: qx=> x /= ex; elim/quotP: qy=> y /= ey; elim/quotP: qz=> z /= ez.
+rewrite ex ey ez.
+admit.
+Admitted.
 
 End InverseLimit.
