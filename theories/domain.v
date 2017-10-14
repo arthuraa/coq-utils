@@ -386,6 +386,86 @@ Definition pred_of_lcset (T : domType) (xs : lcset T) :=
 Canonical lcset_predType T := mkPredType (@pred_of_lcset T).
 Canonical lcset_of_predType (T : domType) := [predType of {lcset T}].
 
+Module QDom.
+
+Record axioms T (qappr : rel T) (qlub : T -> T -> option T) := Ax {
+  _ : reflexive qappr;
+  _ : transitive qappr;
+  _ : forall x y, Dom.is_lub qappr x y (qlub x y)
+}.
+
+Record predom T := PreDom {
+  qappr : rel T;
+  qlub  : T -> T -> option T;
+   _    : axioms qappr qlub
+}.
+
+Section Dom.
+
+Local Open Scope quotient_scope.
+
+Variable T : ordType.
+Variable D : predom T.
+
+Local Notation qappr := (qappr D).
+Local Notation qlub  := (qlub D).
+
+Implicit Types x y : T.
+
+Lemma qappr_refl : reflexive qappr.
+Proof. by case: D => ?? []. Qed.
+
+Lemma qappr_trans : transitive qappr.
+Proof. by case: D => ?? []. Qed.
+
+Lemma is_lub_qlub : forall x y, Dom.is_lub qappr x y (qlub x y).
+Proof. by case: D => ?? []. Qed.
+
+Definition qdom_eq x y := qappr x y && qappr y x.
+
+Lemma qdom_eqP : equiv_class_of qdom_eq.
+Proof.
+rewrite /qdom_eq; case: D=> r l [refl trans _] /=; split.
+- by move=> x; rewrite !refl.
+- by move=> x y; rewrite andbC.
+move=> y x z /andP [xy yx] /andP [yz zy].
+by rewrite (trans _ _ _ xy) // (trans _ _ _ zy).
+Qed.
+
+Canonical qdom_eq_equiv := EquivRelPack qdom_eqP.
+
+Implicit Types qx qy : {eq_quot qdom_eq}.
+
+Definition qdom_appr qx qy := qappr (repr qx) (repr qy).
+Definition qdom_lub qx qy : option {eq_quot qdom_eq} :=
+  omap \pi (qlub (repr qx) (repr qy)).
+
+Lemma qdom_lubP : Dom.axioms qdom_appr qdom_lub.
+Proof.
+split.
+- move=> qx; exact: qappr_refl.
+- move=> ???; exact: qappr_trans.
+- move=> qx qy; rewrite /qdom_appr.
+  elim/quotP: qx=> /= x ->; elim/quotP: qy=> /= y -> xy.
+  exact/eqmodP.
+rewrite /qdom_appr /qdom_lub /=.
+elim/quotP=> /= x ex; elim/quotP=> /= y ey; elim/quotP=> /= z ez.
+rewrite ex ey ez is_lub_qlub; case: (qlub x y) => [xy|] //=.
+case: piP=> /= xy' /eqmodP/andP [l1 l2].
+apply/(sameP idP)/(iffP idP); [move: l1|move: l2]; exact: qappr_trans.
+Qed.
+
+Definition qdom_domMixin := DomMixin qdom_lubP.
+
+Canonical qdom_domType :=
+  Eval hnf in DomType {eq_quot qdom_eq} qdom_domMixin.
+
+End Dom.
+
+End QDom.
+
+Canonical QDom.qdom_domType.
+
 Module Discrete.
 
 Section ClassDef.
