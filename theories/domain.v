@@ -460,6 +460,7 @@ Qed.
 
 Canonical qdom_eqType := Eval hnf in [eqType of type].
 Canonical qdom_choiceType := Eval hnf in [choiceType of type].
+Canonical qdom_quotType := Eval hnf in [quotType of type].
 Canonical qdom_ordType := Eval hnf in [ordType of type].
 Definition qdom_domMixin := DomMixin qdom_lubP.
 Canonical qdom_domType := Eval hnf in DomType type qdom_domMixin.
@@ -467,6 +468,7 @@ Canonical qdom_domType := Eval hnf in DomType type qdom_domMixin.
 Canonical qdom_of_eqType := Eval hnf in [eqType of type_of (Phantom _ _)].
 Canonical qdom_of_choiceType :=
   Eval hnf in [choiceType of type_of (Phantom _ _)].
+Canonical qdom_of_quotType := Eval hnf in [quotType of type_of (Phantom _ _)].
 Canonical qdom_of_ordType := Eval hnf in [ordType of type_of (Phantom _ _)].
 Canonical qdom_of_domType := Eval hnf in [domType of type_of (Phantom _ _)].
 
@@ -474,19 +476,43 @@ End Dom.
 
 End QDom.
 
-Notation "{ 'qdom' T }" :=
-  (QDom.type_of (Phantom (rel _) T))
-  (at level 0, format "{ 'qdom'  T }") : type_scope.
+Coercion QDom.qappr : QDom.predom >-> rel.
+
+Notation "{ 'qdom' lt }" :=
+  (QDom.type_of (Phantom (rel _) lt))
+  (at level 0, format "{ 'qdom'  lt }") : type_scope.
 
 Canonical QDom.qdom_eqType.
 Canonical QDom.qdom_choiceType.
+Canonical QDom.qdom_quotType.
 Canonical QDom.qdom_ordType.
 Canonical QDom.qdom_domType.
 
 Canonical QDom.qdom_of_eqType.
 Canonical QDom.qdom_of_choiceType.
+Canonical QDom.qdom_of_quotType.
 Canonical QDom.qdom_of_ordType.
 Canonical QDom.qdom_of_domType.
+
+Section QDomTheory.
+
+Local Open Scope quotient_scope.
+
+Variable T : ordType.
+Variable apprT : QDom.predom T.
+Implicit Types (x y : T) (qx qy : {qdom apprT}).
+
+Lemma pi_appr x y : \pi_{qdom apprT} x ⊑ \pi y = apprT x y.
+Proof.
+rewrite /appr /= /QDom.qdom_appr.
+case: piP => x' /eqmodP/andP [xx' x'x].
+case: piP => y' /eqmodP/andP [yy' y'y].
+apply/(sameP idP)/(iffP idP).
+  by move=> xy; apply: QDom.qappr_trans (QDom.qappr_trans xy yy').
+by move=> x'y'; apply: QDom.qappr_trans (QDom.qappr_trans x'y' y'y).
+Qed.
+
+End QDomTheory.
 
 Module Discrete.
 
@@ -1270,6 +1296,24 @@ Qed.
 
 End IncFunDom.
 
+(* FIXME: These probably belong somewhere else *)
+
+Section Untag.
+
+Variables (I : eqType) (T_ : I -> Type).
+
+Definition untag i (u : {i : I & T_ i}) : option (T_ i) :=
+  match i =P tag u with
+  | ReflectT eq_it => Some (eq_rect_r T_ (tagged u) eq_it)
+  | ReflectF _     => None
+  end.
+
+Lemma TaggedK i : pcancel (Tagged T_) (@untag i).
+by move=> x; rewrite /untag; case: eqP => // eq_nt; rewrite eq_axiomK.
+Qed.
+
+End Untag.
+
 Section Tagged.
 
 Variables (I : ordType) (T_ : I -> domType).
@@ -1384,6 +1428,18 @@ Lemma of_void_embP T : emb_class_of (of_void T) (@to_void T).
 Proof. by split; case. Qed.
 Canonical of_void_emb T := Embedding (of_void_embP T).
 
+(* FIXME: Move *)
+Lemma Tagged_embP (I : ordType) (T_ : I -> domType) i :
+  emb_class_of (Tagged T_) (@untag _ _ i).
+Proof.
+split; first exact/TaggedK.
+move=> /= x [j y]; rewrite tag_apprE /=.
+rewrite /untag /=; move: y; case: (i =P j)=> //.
+move=> p; move: (p); rewrite -{}p => p y.
+by rewrite eq_axiomK /= tagged_asE.
+Qed.
+Canonical Tagged_emb I TT i := Embedding (@Tagged_embP I TT i).
+
 Record functor := Functor {
   f_obj  :> domType -> domType;
   f_mor  :  forall T S : domType, {emb T -> S} -> {emb f_obj T -> f_obj S};
@@ -1438,13 +1494,18 @@ Canonical bump_emb := Embedding bump_embP.
 Definition piter T n (f : T -> option T) :=
   iter n (obind f) \o Some.
 
+Lemma pcan_piter T n (f : T -> T) (g : T -> option T) :
+  pcancel f g -> pcancel (iter n f) (piter n g).
+Proof.
+move=> pcan; rewrite /piter /=; elim: n=> [|n IH] //= x.
+move: (IH (f x)); rewrite iterSr /= => -> /=.
+by rewrite pcan.
+Qed.
+
 Lemma iter_embP T n (e : {emb T -> T}) : emb_class_of (iter n e) (piter n e^r).
 Proof.
-split; rewrite /piter /=.
-  elim: n=> [|n IH] //= x.
-  move: (IH (e x)); rewrite iterSr /= => -> /=.
-  by rewrite emb_appK.
-elim: n=> [|n IH] //= x y.
+split; first exact/pcan_piter/emb_appK.
+rewrite /piter; elim: n=> [|n IH] //= x y.
 rewrite emb_retP -iterS iterSr /=.
 case: (e^r y)=> [z|] //=; first by rewrite -IH.
 suff -> : iter n (obind e^r) None = None by [].
@@ -1527,15 +1588,58 @@ Definition mu_of of phantom (domType -> domType) F := mu.
 Notation P := (Phantom _ (f_obj F)).
 Canonical mu_eqType := Eval hnf in [eqType of mu].
 Canonical mu_choiceType := Eval hnf in [choiceType of mu].
+Canonical mu_quotType := Eval hnf in [quotType of mu].
 Canonical mu_ordType := Eval hnf in [ordType of mu].
 Canonical mu_domType := Eval hnf in [domType of mu].
 Canonical mu_of_eqType := Eval hnf in [eqType of mu_of P].
 Canonical mu_of_choiceType := Eval hnf in [choiceType of mu_of P].
+Canonical mu_of_quotType := Eval hnf in [quotType of mu_of P].
 Canonical mu_of_ordType := Eval hnf in [ordType of mu_of P].
 Canonical mu_of_domType := Eval hnf in [domType of mu_of P].
 
 End InverseLimit.
 
+Prenex Implicits bump.
+Prenex Implicits unbump.
+
 Notation "{ 'mu' F }" :=
   (mu_of (Phantom (domType -> domType) (f_obj F)))
   (at level 0, format "{ 'mu'  F }") : type_scope.
+
+Section MuTheory.
+
+Local Open Scope quotient_scope.
+
+Variable F : functor.
+
+Definition in_mu n (x : chain F n) : {mu F} :=
+  \pi (Tagged (chain F) x).
+
+Definition out_mu n (x : {mu F}) : option (chain F n) :=
+  if tag (repr x) <= n then
+    untag n (iter (n - tag (repr x)) bump (repr x))
+  else obind (untag n) (piter (tag (repr x) - n) unbump (repr x)).
+
+Lemma in_mu_embP n : emb_class_of (@in_mu n) (@out_mu n).
+Proof.
+rewrite /in_mu /out_mu; split.
+  move=> x /=; case: piP => y /eqmodP /anti_appr /=.
+  have [/ltnW nt|tn] := ltnP.
+    move: (nt); rewrite {2}/bump_to -subn_eq0 => /eqP -> /= <-.
+    rewrite tag_bump_to /= (maxn_idPl nt) /bump_to /=.
+    rewrite pcan_piter /=; last exact: emb_appK.
+    by rewrite TaggedK.
+  rewrite /bump_to => <- /=.
+  move: (tn); rewrite -subn_eq0 => /eqP -> /=.
+  by rewrite TaggedK.
+move=> /= x; elim/quotP=> /= y ->; rewrite pi_appr /= /invlim_appr /=.
+have [/ltnW nt|tn] := ltnP.
+  move: (nt); rewrite /bump_to -subn_eq0 /= => /eqP -> /=.
+  rewrite emb_retP /=; case: piter=> //= z.
+  by rewrite oapprE emb_retP.
+move: (tn); rewrite /bump_to -subn_eq0 /= => /eqP -> /=.
+exact/emb_retP.
+Qed.
+Canonical in_mu_emb n := Embedding (in_mu_embP n).
+
+End MuTheory.
