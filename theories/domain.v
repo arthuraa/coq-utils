@@ -1457,10 +1457,30 @@ Proof. by case: e => ?? []. Qed.
 Lemma emb_appr T S (e : {emb T -> S}) x y : x ⊑ y = e x ⊑ e y.
 Proof. by rewrite emb_retP emb_appK. Qed.
 
+Lemma emb_apprR T S (e : {emb T -> S}) x y : x ⊑ y -> e^r x ⊑ e^r y.
+Proof.
+move=> xy; case ex: (e^r x)=> [x'|] //=.
+have x'x: e x' ⊑ x by rewrite emb_retP -ex apprxx.
+by rewrite -emb_retP; apply: appr_trans xy.
+Qed.
+
 Lemma emb_lub T S (e : {emb T -> S}) x y : e x ⊔ e y = omap e (x ⊔ y).
 Proof.
 by apply/esym/lub_unique=> z; case: (lubP x y)=> [xy Pxy|] /=;
 rewrite !emb_retP; case: (e^r z)=> [z'|] //=; rewrite !oapprE.
+Qed.
+
+Lemma eq_emb T S (e1 e2 : {emb T -> S}) : e1 =1 e2 <-> e1^r =1 e2^r.
+Proof.
+split=> e x.
+  apply/anti_appr; case ey1: (e1^r x)=> [y1|] //=.
+    rewrite -emb_retP -e emb_retP ey1 apprxx /=.
+    case ey2: (e2^r x)=> [y2|] //=.
+    by rewrite -ey1 -emb_retP e emb_retP ey2 apprxx /=.
+  case ey2: (e2^r x)=> [y2|] //=.
+  by rewrite -ey1 -emb_retP e emb_retP ey2 apprxx.
+apply/anti_appr; rewrite emb_retP e emb_appK apprxx.
+by rewrite emb_retP -e emb_appK apprxx.
 Qed.
 
 Lemma id_embP T : emb_class_of (@id T) Some.
@@ -1703,6 +1723,101 @@ Canonical mu_of_quotType := Eval hnf in [quotType of mu_of P].
 Canonical mu_of_ordType := Eval hnf in [ordType of mu_of P].
 Canonical mu_of_domType := Eval hnf in [domType of mu_of P].
 
+Notation "{ 'mu' F }" :=
+  (mu_of (Phantom (domType -> domType) (f_obj F)))
+  (at level 0, format "{ 'mu'  F }") : type_scope.
+
+Local Open Scope quotient_scope.
+
+Definition in_mu n (x : chain n) : {mu F} :=
+  \pi (Tagged chain x).
+
+Definition out_mu n (x : {mu F}) : option (chain n) :=
+  (chain_mor (leq_maxl n (tag (repr x))))^r
+    (chain_mor (leq_maxr n (tag (repr x))) (tagged (repr x))).
+
+Lemma in_mu_embP n : emb_class_of (@in_mu n) (@out_mu n).
+Proof.
+rewrite /in_mu /out_mu; split.
+  move=> x /=; case: piP => y.
+  move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
+  move=> /eqmodP/(@anti_invlim_appr (Tagged chain x) _ _ xc yc) /= <-.
+  by rewrite emb_appK.
+move=> /= x; elim/quotP=> /= y ->; rewrite pi_appr /=.
+move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
+by rewrite (@invlim_apprE (Tagged chain x) _ _ xc yc) emb_retP.
+Qed.
+Canonical in_mu_emb n := Embedding (in_mu_embP n).
+
+Lemma in_mu_chain_mor n m (e : n <= m) (x : chain n) :
+  in_mu (chain_mor e x) = in_mu x.
+Proof.
+rewrite /in_mu; apply/eqmodP=> /=; rewrite /QDom.qdom_eq /=.
+by rewrite !(@invlim_apprE _ _ m) !chain_mor_nn !apprxx.
+Qed.
+
+Lemma out_mu_chain_mor n m (e : n <= m) (x : {mu F}) :
+  obind (chain_mor e)^r (out_mu m x) = out_mu n x.
+Proof.
+suff : comp_emb (chain_mor e) (@in_mu_emb m) =1 @in_mu_emb n.
+  by move=> /eq_emb /= <-.
+exact/in_mu_chain_mor.
+Qed.
+
+Lemma mu_inv (xs : {fset {mu F}}) :
+  exists p : {n : nat & {fset chain n}},
+    xs = @in_mu (tag p) @: tagged p.
+Proof.
+pose c  := foldr maxn 0 [seq tag (repr x) | x <- xs].
+pose ys := fset (pmap (@out_mu c) xs).
+have Pc : forall x : {mu F}, x \in xs -> tag (repr x) <= c.
+  move=> x; rewrite /c inE /=; elim: (FSet.fsval xs)=> //= x'' xs' IH.
+  rewrite inE; case/orP=> [/eqP <- {x''}|]; first exact/leq_maxl.
+  by move=> x'_in; rewrite leq_max IH // orbT.
+exists (Tagged (fun n => {fset chain n}) ys).
+apply/eq_fset=> /= x; apply/(sameP idP)/(iffP idP).
+  case/imfsetP=> y; rewrite in_fset mem_pmap.
+  case/mapP=> /= x' x'_in ex' ex.
+  move: (Pc x' x'_in)=> x'_c.
+  rewrite (_ : x = x') // ex.
+  move: ex'; rewrite /out_mu; move: (leq_maxl _ _) (leq_maxr _ _).
+  rewrite (maxn_idPl x'_c) => cc {x'_c} x'_c; rewrite chain_mor_nn /=.
+  move=> [->]; rewrite in_mu_chain_mor /in_mu -[RHS]reprK; congr \pi.
+  by case: (repr x').
+move=> x_in; apply/imfsetP; move: (Pc x x_in) => x_c.
+exists (chain_mor x_c (tagged (repr x))).
+  rewrite /ys in_fset mem_pmap; apply/mapP=> /=.
+  exists x=> //; rewrite /out_mu.
+  move: (leq_maxl _ _) (leq_maxr _ _).
+  rewrite (maxn_idPl x_c) => cc x_c'.
+  by rewrite chain_mor_nn /= (eq_irrelevance x_c x_c').
+rewrite in_mu_chain_mor /in_mu -[LHS]reprK; congr \pi.
+by case: (repr x).
+Qed.
+
+Definition unroll (x : {mu F}) : F [domType of {mu F}] :=
+  let x' := repr x in
+  match tag x' as n return chain n -> _ with
+  | 0    => fun xx => of_void _ xx
+  | n.+1 => fun xx => f_mor F (in_mu_emb n) xx
+  end (tagged x').
+
+Lemma unrollE n (x : chain n.+1) :
+  unroll (\pi (Tagged chain x)) = f_mor F (in_mu_emb n) x.
+Proof.
+rewrite /unroll /=; case: piP=> [[[|m] y]]; first by case: y.
+move: (leq_maxl n m) (leq_maxr n m)=> xc yc.
+move: (xc) (yc); rewrite -ltnS -[m <= _]ltnS => SxSc SySc.
+move=> /eqmodP.
+move=> /(@anti_invlim_appr (Tagged chain x) (Tagged chain y) _ SxSc SySc).
+rewrite /= (chain_morS xc SxSc) (chain_morS yc SySc).
+have em : in_mu_emb m =1 comp_emb (@chain_mor m (maxn n m) yc) (in_mu_emb _).
+  by move=> y' /=; rewrite in_mu_chain_mor.
+have en : in_mu_emb n =1 comp_emb (@chain_mor n (maxn n m) xc) (in_mu_emb _).
+  by move=> x' /=; rewrite in_mu_chain_mor.
+by rewrite (f_ext em) (f_ext en) !f_comp /= => ->.
+Qed.
+
 End InverseLimit.
 
 (*Prenex Implicits bump.
@@ -1717,61 +1832,3 @@ Notation "e '^r'" := (emb_ret e)
 Notation "{ 'mu' F }" :=
   (mu_of (Phantom (domType -> domType) (f_obj F)))
   (at level 0, format "{ 'mu'  F }") : type_scope.
-
-Section MuTheory.
-
-Local Open Scope quotient_scope.
-
-Variable F : functor.
-
-Definition in_mu n (x : chain F n) : {mu F} :=
-  \pi (Tagged (chain F) x).
-
-Definition out_mu n (x : {mu F}) : option (chain F n) :=
-  (chain_mor F (leq_maxl n (tag (repr x))))^r
-    (chain_mor F (leq_maxr n (tag (repr x))) (tagged (repr x))).
-
-Lemma in_mu_embP n : emb_class_of (@in_mu n) (@out_mu n).
-Proof.
-rewrite /in_mu /out_mu; split.
-  move=> x /=; case: piP => y.
-  move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
-  move=> /eqmodP/(@anti_invlim_appr _ (Tagged (chain F) x) _ _ xc yc) /= <-.
-  by rewrite emb_appK.
-move=> /= x; elim/quotP=> /= y ->; rewrite pi_appr /=.
-move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
-by rewrite (@invlim_apprE _ (Tagged (chain F) x) _ _ xc yc) emb_retP.
-Qed.
-Canonical in_mu_emb n := Embedding (in_mu_embP n).
-
-Lemma in_mu_chain_mor n m (e : n <= m) (x : chain F n) :
-  in_mu (chain_mor F e x) = in_mu x.
-Proof.
-rewrite /in_mu; apply/eqmodP=> /=; rewrite /QDom.qdom_eq /=.
-by rewrite !(@invlim_apprE _ _ _ m) !chain_mor_nn !apprxx.
-Qed.
-
-Definition unroll (x : {mu F}) : F [domType of {mu F}] :=
-  let x' := repr x in
-  match tag x' as n return chain F n -> _ with
-  | 0    => fun x => of_void _ x
-  | n.+1 => fun x => f_mor F (in_mu_emb n) x
-  end (tagged x').
-
-Lemma unrollE n (x : chain F n.+1) :
-  unroll (\pi (Tagged (chain F) x)) = f_mor F (in_mu_emb n) x.
-Proof.
-rewrite /unroll /=; case: piP=> [[[|m] y]]; first by case: y.
-move: (leq_maxl n m) (leq_maxr n m)=> xc yc.
-move: (xc) (yc); rewrite -ltnS -[m <= _]ltnS => SxSc SySc.
-move=> /eqmodP.
-move=> /(@anti_invlim_appr _ (Tagged (chain F) x) (Tagged (chain F) y) _ SxSc SySc).
-rewrite /= (chain_morS xc SxSc) (chain_morS yc SySc).
-have em : in_mu_emb m =1 comp_emb (@chain_mor F m (maxn n m) yc) (in_mu_emb _).
-  by move=> y' /=; rewrite in_mu_chain_mor.
-have en : in_mu_emb n =1 comp_emb (@chain_mor F n (maxn n m) xc) (in_mu_emb _).
-  by move=> x' /=; rewrite in_mu_chain_mor.
-by rewrite (f_ext em) (f_ext en) !f_comp /= => ->.
-Qed.
-
-End MuTheory.
