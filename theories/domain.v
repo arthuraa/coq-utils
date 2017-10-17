@@ -1361,6 +1361,69 @@ Proof. by []. Qed.
 
 End Tagged.
 
+Section DIter.
+
+Implicit Types (T : nat -> Type) (n m : nat).
+
+Fixpoint diter T_ n (f : forall m, T_ m -> T_ m.+1) (x : T_ 0) : T_ n :=
+  if n is n.+1 then f n (diter n f x) else x.
+
+Lemma diter_add T_ n m (f : forall m, T_ m -> T_ m.+1) (x : T_ 0) :
+  diter (n + m) f x = diter n (fun k => f (k + m)) (diter m f x).
+Proof. by elim: n => [//|n /= ->]. Qed.
+
+Lemma leq_ind n (T : forall m, n <= m -> Prop) :
+  T n (leqnn n) ->
+  (forall m (nm : n <= m), T m nm -> T m.+1 (leq_trans nm (leqnSn m))) ->
+  (forall m (nm : n <= m), T m nm).
+Proof.
+move=> P0 PS; elim=> [|m IH] nm.
+  move: nm (nm) T P0 {PS}; rewrite {1}leqn0 => /eqP -> nm T.
+  by rewrite (eq_irrelevance (leqnn 0) nm).
+move: nm (nm) T P0 PS IH; rewrite {1}leq_eqVlt.
+case/orP=> [/eqP -> {n}|].
+  rewrite -[m < m.+1]/(m <= m) => nm T P0 _ _.
+  by rewrite -(eq_irrelevance (leqnn m.+1) nm).
+move=> nm nm1 T _ PS IH; move: (PS _ nm (IH nm)).
+by rewrite (eq_irrelevance (leq_trans _ _) nm1).
+Qed.
+
+Definition nat_trans T_ n m (e : n <= m)
+  (f : forall k, T_ k -> T_ k.+1) (x : T_ n) : T_ m :=
+  eq_rect (m - n + n) T_
+          (@diter (fun k => T_ (k + n)) (m - n)
+                  (fun k => f  (k + n)) x)
+          m (subnK e).
+
+Lemma nat_trans_nn T_ n (e : n <= n)
+      (f : forall k, T_ k -> T_ k.+1) (x : T_ n) : nat_trans e f x = x.
+Proof.
+rewrite /nat_trans; move: (subnK e); rewrite subnn=> p.
+by rewrite eq_axiomK /=.
+Qed.
+
+Lemma nat_transS T_ n m (e : n <= m)
+      (f : forall k, T_ k -> T_ k.+1) (x : T_ n) :
+  nat_trans (leq_trans e (leqnSn m)) f x = f m (nat_trans e f x).
+Proof.
+rewrite /nat_trans; move: (subnK _); rewrite (subSn e) => p /=.
+move: (m - n) p (subnK e) => k p p'.
+have -> : p = congr1 S p' by exact/eq_irrelevance.
+move: (diter _ _ _) => x'; by case: m / p' {e p}.
+Qed.
+
+Lemma nat_trans_trans T_ n m p (nm : n <= m) (mp : m <= p) (np : n <= p)
+  (f : forall k, T_ k -> T_ k.+1) (x : T_ n) :
+  nat_trans np f x = nat_trans mp f (nat_trans nm f x).
+Proof.
+elim/leq_ind: p / mp np => [|p mp IH] np.
+  by rewrite nat_trans_nn (eq_irrelevance nm np).
+rewrite (eq_irrelevance np (leq_trans (leq_trans nm mp) (leqnSn _))).
+by rewrite !nat_transS IH.
+Qed.
+
+End DIter.
+
 Section InverseLimit.
 
 Implicit Types T S U : domType.
@@ -1384,6 +1447,9 @@ Notation "e '^r'" := (emb_ret e)
 
 Lemma emb_appK T S (e : {emb T -> S}) : pcancel e e^r.
 Proof. by case: e => ?? []. Qed.
+
+Lemma emb_inj T S (e : {emb T -> S}) : injective e.
+Proof. exact/pcan_inj/emb_appK. Qed.
 
 Lemma emb_retP T S (e : {emb T -> S}) : forall x y, e x ⊑ y = Some x ⊑ e^r y.
 Proof. by case: e => ?? []. Qed.
@@ -1461,13 +1527,37 @@ Fixpoint chain n : domType :=
 Fixpoint chain_mor1 n : {emb chain n -> chain n.+1} :=
   if n is n.+1 then f_mor F (chain_mor1 n) else of_void_emb (chain 1).
 
-Fixpoint chain_mor_rec m n : {emb chain n -> chain (m + n)} :=
-  if m is m.+1 then comp_emb (chain_mor_rec m n) (chain_mor1 (m + n))
-  else id_emb (chain n).
+Definition chain_mor n m (nm : n <= m) : {emb chain n -> chain m} :=
+  @nat_trans (fun k => {emb chain n -> chain k}) _ _ nm
+             (fun k e => comp_emb e (chain_mor1 k)) (id_emb _).
+
+Lemma chain_mor_nn n (nn : n <= n) : chain_mor nn = id_emb _.
+Proof. by rewrite /chain_mor nat_trans_nn. Qed.
+
+Lemma chain_mor_trans n m p (nm : n <= m) (mp : m <= p) :
+  chain_mor (leq_trans nm mp) =1 chain_mor mp \o chain_mor nm.
+Proof.
+move=> x /=; rewrite /chain_mor.
+elim/leq_ind: p / mp=> [|p mp IH].
+  by rewrite !nat_trans_nn (eq_irrelevance (leq_trans _ _) nm).
+rewrite (eq_irrelevance (leq_trans _ _)
+                        (leq_trans (leq_trans nm mp) (leqnSn p))).
+by rewrite !nat_transS /= IH.
+Qed.
+
+Lemma chain_morS n m (nm : n <= m) (SnSm : n < m.+1) :
+  chain_mor SnSm =1 f_mor F (chain_mor nm).
+Proof.
+move=> x; elim/leq_ind: m / nm SnSm => [|m nm IH] SnSm.
+  by rewrite !chain_mor_nn f_id.
+rewrite {2}/chain_mor nat_transS /= f_comp /=.
+rewrite (eq_irrelevance SnSm (@leq_trans m.+1 n.+1 m.+2 nm (leqnSn m.+1))).
+by rewrite /chain_mor nat_transS /= IH.
+Qed.
 
 Implicit Types x y : {n : nat & chain n}.
 
-Definition bump x : {n : nat & chain n} :=
+(*Definition bump x : {n : nat & chain n} :=
   Tagged chain (chain_mor1 _ (tagged x)).
 
 Definition unbump x : option {n : nat & chain n} :=
@@ -1530,22 +1620,35 @@ have e : forall a b, a - b = maxn a b - b.
 congr iter.
 by rewrite e [c2 - _]e addnBA ?subnK ?leq_maxr // [RHS]e maxnA.
 Qed.
+*)
 
-Definition invlim_appr x y : bool := bump_to (tag y) x ⊑ bump_to (tag x) y.
+Definition invlim_appr x y : bool :=
+  chain_mor (leq_maxl (tag x) (tag y)) (tagged x)
+  ⊑ chain_mor (leq_maxr (tag x) (tag y)) (tagged y).
 
-Lemma invlim_apprE x y c :
-  (tag x <= c) && (tag y <= c) ->
-  invlim_appr x y = (bump_to c x ⊑ bump_to c y).
+Lemma invlim_apprE x y c (xc : tag x <= c) (yc : tag y <= c) :
+  invlim_appr x y = (chain_mor xc (tagged x) ⊑ chain_mor yc (tagged y)).
 Proof.
-rewrite /invlim_appr /bump_to -geq_max => e.
-rewrite -(subnK e) -!addnBA ?(leq_maxl, leq_maxr) // !iter_add.
-by rewrite {2}maxnE addKn {3}maxnC (maxnE (tag y)) addKn -emb_appr.
+have xyc : maxn (tag x) (tag y) <= c by rewrite geq_max xc.
+rewrite (eq_irrelevance xc (leq_trans (leq_maxl _ _) xyc)).
+rewrite (eq_irrelevance yc (leq_trans (leq_maxr _ _) xyc)).
+by rewrite !chain_mor_trans /= -emb_appr.
 Qed.
 
-Definition invlim_lub x y := bump_to (tag y) x ⊔ bump_to (tag x) y.
+Lemma anti_invlim_appr x y c (xc : tag x <= c) (yc : tag y <= c) :
+  invlim_appr x y && invlim_appr y x ->
+  chain_mor xc (tagged x) = chain_mor yc (tagged y).
+Proof.
+rewrite (invlim_apprE xc yc) (invlim_apprE yc xc); exact/anti_appr.
+Qed.
 
-Lemma invlim_lubE x y c :
-  (tag x <= c) && (tag y <= c) ->
+Definition invlim_lub x y :=
+  omap (Tagged chain)
+       (chain_mor (leq_maxl (tag x) (tag y)) (tagged x)
+        ⊔ chain_mor (leq_maxr (tag x) (tag y)) (tagged y)).
+
+(*
+Lemma invlim_lubE x y c (xc : tag x <= c) (yc : tag y <= c) :
   omap (bump_to c) (invlim_lub x y) = bump_to c x ⊔ bump_to c y.
 Proof.
 case/andP=> [xc yc]; rewrite /invlim_lub.
@@ -1556,29 +1659,32 @@ move: (bump_to (tag y) x) (bump_to (tag x) y) => {x y xc yc} [n x] [m y].
 move=> /= exy; move: exy y => <- {m} y.
 rewrite /bump_to /= emb_lub tag_lubE /= eqxx tagged_asE; by case: (x ⊔ y).
 Qed.
+*)
 
 Lemma invlim_lubP : QDom.axioms invlim_appr invlim_lub.
 Proof.
 split.
-- by move=> x; rewrite /invlim_appr apprxx.
+- move=> x; rewrite /invlim_appr.
+  by rewrite (eq_irrelevance (leq_maxl _ _) (leq_maxr _ _)) apprxx.
 - move=> y x z.
   pose c := maxn (tag x) (maxn (tag y) (tag z)).
   have xc : tag x <= c by rewrite leq_maxl.
   have yc : tag y <= c by rewrite /c (maxnC (tag y)) maxnA leq_maxr.
   have zc : tag z <= c by rewrite /c maxnA leq_maxr.
-  rewrite !(@invlim_apprE _ _ c) ?xc ?yc ?zc //.
+  rewrite (invlim_apprE xc yc) (invlim_apprE yc zc) (invlim_apprE xc zc).
   exact: appr_trans.
 move=> x y z.
 pose c := maxn (tag x) (maxn (tag y) (tag z)).
 have xc : tag x <= c by rewrite leq_maxl.
 have yc : tag y <= c by rewrite /c (maxnC (tag y)) maxnA leq_maxr.
 have zc : tag z <= c by rewrite /c maxnA leq_maxr.
-rewrite !(@invlim_apprE _ _ c) ?xc ?yc ?zc // is_lub_lub -invlim_lubE ?xc //.
-case exy: (invlim_lub x y)=> [xy|] //=; rewrite -invlim_apprE // zc andbT //.
-suff -> : tag xy = maxn (tag x) (tag y) by rewrite geq_max xc.
-move: exy; rewrite /invlim_lub tag_lubE.
-rewrite ![in X in if X then _ else _]tag_bump_to maxnC eqxx.
-by case: lub=> //; rewrite tag_bump_to maxnC /= => ? [<-].
+have xyc : maxn (tag x) (tag y) <= c by rewrite geq_max xc.
+rewrite (invlim_apprE xc zc) (invlim_apprE yc zc) /invlim_lub is_lub_lub.
+rewrite (eq_irrelevance xc (leq_trans (leq_maxl _ _) xyc)).
+rewrite (eq_irrelevance yc (leq_trans (leq_maxr _ _) xyc)).
+rewrite !chain_mor_trans /= emb_lub.
+case: (_ ⊔ _)=> [xy|] //=.
+by rewrite (@invlim_apprE (Tagged chain xy) _ _ xyc zc).
 Qed.
 Canonical invlim_predom := QDom.PreDom invlim_lubP.
 
@@ -1599,8 +1705,14 @@ Canonical mu_of_domType := Eval hnf in [domType of mu_of P].
 
 End InverseLimit.
 
-Prenex Implicits bump.
-Prenex Implicits unbump.
+(*Prenex Implicits bump.
+Prenex Implicits unbump.*)
+
+Notation "{ 'emb' T }" := (embedding_of (Phant T))
+  (at level 0, format "{ 'emb'  T }") : type_scope.
+
+Notation "e '^r'" := (emb_ret e)
+  (at level 3, no associativity, format "e ^r") : dom_scope.
 
 Notation "{ 'mu' F }" :=
   (mu_of (Phantom (domType -> domType) (f_obj F)))
@@ -1616,30 +1728,50 @@ Definition in_mu n (x : chain F n) : {mu F} :=
   \pi (Tagged (chain F) x).
 
 Definition out_mu n (x : {mu F}) : option (chain F n) :=
-  if tag (repr x) <= n then
-    untag n (iter (n - tag (repr x)) bump (repr x))
-  else obind (untag n) (piter (tag (repr x) - n) unbump (repr x)).
+  (chain_mor F (leq_maxl n (tag (repr x))))^r
+    (chain_mor F (leq_maxr n (tag (repr x))) (tagged (repr x))).
 
 Lemma in_mu_embP n : emb_class_of (@in_mu n) (@out_mu n).
 Proof.
 rewrite /in_mu /out_mu; split.
-  move=> x /=; case: piP => y /eqmodP /anti_appr /=.
-  have [/ltnW nt|tn] := ltnP.
-    move: (nt); rewrite {2}/bump_to -subn_eq0 => /eqP -> /= <-.
-    rewrite tag_bump_to /= (maxn_idPl nt) /bump_to /=.
-    rewrite pcan_piter /=; last exact: emb_appK.
-    by rewrite TaggedK.
-  rewrite /bump_to => <- /=.
-  move: (tn); rewrite -subn_eq0 => /eqP -> /=.
-  by rewrite TaggedK.
-move=> /= x; elim/quotP=> /= y ->; rewrite pi_appr /= /invlim_appr /=.
-have [/ltnW nt|tn] := ltnP.
-  move: (nt); rewrite /bump_to -subn_eq0 /= => /eqP -> /=.
-  rewrite emb_retP /=; case: piter=> //= z.
-  by rewrite oapprE emb_retP.
-move: (tn); rewrite /bump_to -subn_eq0 /= => /eqP -> /=.
-exact/emb_retP.
+  move=> x /=; case: piP => y.
+  move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
+  move=> /eqmodP/(@anti_invlim_appr _ (Tagged (chain F) x) _ _ xc yc) /= <-.
+  by rewrite emb_appK.
+move=> /= x; elim/quotP=> /= y ->; rewrite pi_appr /=.
+move: (leq_maxl _ _) (leq_maxr _ _)=> xc yc.
+by rewrite (@invlim_apprE _ (Tagged (chain F) x) _ _ xc yc) emb_retP.
 Qed.
 Canonical in_mu_emb n := Embedding (in_mu_embP n).
+
+Lemma in_mu_chain_mor n m (e : n <= m) (x : chain F n) :
+  in_mu (chain_mor F e x) = in_mu x.
+Proof.
+rewrite /in_mu; apply/eqmodP=> /=; rewrite /QDom.qdom_eq /=.
+by rewrite !(@invlim_apprE _ _ _ m) !chain_mor_nn !apprxx.
+Qed.
+
+Definition unroll (x : {mu F}) : F [domType of {mu F}] :=
+  let x' := repr x in
+  match tag x' as n return chain F n -> _ with
+  | 0    => fun x => of_void _ x
+  | n.+1 => fun x => f_mor F (in_mu_emb n) x
+  end (tagged x').
+
+Lemma unrollE n (x : chain F n.+1) :
+  unroll (\pi (Tagged (chain F) x)) = f_mor F (in_mu_emb n) x.
+Proof.
+rewrite /unroll /=; case: piP=> [[[|m] y]]; first by case: y.
+move: (leq_maxl n m) (leq_maxr n m)=> xc yc.
+move: (xc) (yc); rewrite -ltnS -[m <= _]ltnS => SxSc SySc.
+move=> /eqmodP.
+move=> /(@anti_invlim_appr _ (Tagged (chain F) x) (Tagged (chain F) y) _ SxSc SySc).
+rewrite /= (chain_morS xc SxSc) (chain_morS yc SySc).
+have em : in_mu_emb m =1 comp_emb (@chain_mor F m (maxn n m) yc) (in_mu_emb _).
+  by move=> y' /=; rewrite in_mu_chain_mor.
+have en : in_mu_emb n =1 comp_emb (@chain_mor F n (maxn n m) xc) (in_mu_emb _).
+  by move=> x' /=; rewrite in_mu_chain_mor.
+by rewrite (f_ext em) (f_ext en) !f_comp /= => ->.
+Qed.
 
 End MuTheory.
