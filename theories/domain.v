@@ -367,6 +367,7 @@ Canonical lcset_choiceType := Eval hnf in ChoiceType lcset lcset_choiceMixin.
 Definition lcset_ordMixin := [ordMixin of lcset by <:].
 Canonical lcset_ordType := Eval hnf in OrdType lcset lcset_ordMixin.
 
+Canonical lcset_of_subType := [subType of lcset_of (Phant T)].
 Canonical lcset_of_eqType := [eqType of lcset_of (Phant T)].
 Canonical lcset_of_choiceType := [choiceType of lcset_of (Phant T)].
 Canonical lcset_of_ordType := [ordType of lcset_of (Phant T)].
@@ -969,6 +970,9 @@ Implicit Types x y z : sT.
 Lemma lub_val x y : val x ⊔ val y = omap val (x ⊔ y).
 Proof. exact: SubDom.lub_val. Qed.
 
+Lemma appr_val x y : x ⊑ y = val x ⊑ val y.
+Proof. by rewrite !appr_lubL lub_val; case: (_ ⊔ _). Qed.
+
 End SubDomTheory.
 
 Section LCSubDom.
@@ -1535,8 +1539,8 @@ Record functor := Functor {
   f_comp :  forall (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S}),
               f_mor (comp_emb e2 e1) =1 comp_emb (f_mor e2) (f_mor e1);
   f_cont :  forall (T : domType) (x : f_obj T),
-            exists (p : {sT : {lcset T} & f_obj [domType of sT]}),
-              x == f_mor (retr_emb (tag p)) (tagged p)
+            exists (sT : {lcset T}) (x' : f_obj [domType of sT]),
+              x = f_mor (retr_emb sT) x'
 }.
 
 Variable F : functor.
@@ -1765,32 +1769,31 @@ exact/in_mu_chain_mor.
 Qed.
 
 Lemma mu_inv (xs : {fset {mu F}}) :
-  exists p : {n : nat & {fset chain n}},
-    xs = @in_mu (tag p) @: tagged p.
+  exists n (xs' : {fset chain n}), xs = @in_mu n @: xs'.
 Proof.
-pose c  := foldr maxn 0 [seq tag (repr x) | x <- xs].
-pose ys := fset (pmap (@out_mu c) xs).
-have Pc : forall x : {mu F}, x \in xs -> tag (repr x) <= c.
-  move=> x; rewrite /c inE /=; elim: (FSet.fsval xs)=> //= x'' xs' IH.
+pose n  := foldr maxn 0 [seq tag (repr x) | x <- xs].
+pose ys := fset (pmap (@out_mu n) xs).
+have Pn : forall x : {mu F}, x \in xs -> tag (repr x) <= n.
+  move=> x; rewrite /n inE /=; elim: (FSet.fsval xs)=> //= x'' xs' IH.
   rewrite inE; case/orP=> [/eqP <- {x''}|]; first exact/leq_maxl.
   by move=> x'_in; rewrite leq_max IH // orbT.
-exists (Tagged (fun n => {fset chain n}) ys).
+exists n, ys.
 apply/eq_fset=> /= x; apply/(sameP idP)/(iffP idP).
   case/imfsetP=> y; rewrite in_fset mem_pmap.
   case/mapP=> /= x' x'_in ex' ex.
-  move: (Pc x' x'_in)=> x'_c.
+  move: (Pn x' x'_in)=> x'_n.
   rewrite (_ : x = x') // ex.
   move: ex'; rewrite /out_mu; move: (leq_maxl _ _) (leq_maxr _ _).
-  rewrite (maxn_idPl x'_c) => cc {x'_c} x'_c; rewrite chain_mor_nn /=.
+  rewrite (maxn_idPl x'_n) => nn {x'_n} x'_n; rewrite chain_mor_nn /=.
   move=> [->]; rewrite in_mu_chain_mor /in_mu -[RHS]reprK; congr \pi.
   by case: (repr x').
-move=> x_in; apply/imfsetP; move: (Pc x x_in) => x_c.
-exists (chain_mor x_c (tagged (repr x))).
+move=> x_in; apply/imfsetP; move: (Pn x x_in) => x_n.
+exists (chain_mor x_n (tagged (repr x))).
   rewrite /ys in_fset mem_pmap; apply/mapP=> /=.
   exists x=> //; rewrite /out_mu.
   move: (leq_maxl _ _) (leq_maxr _ _).
-  rewrite (maxn_idPl x_c) => cc x_c'.
-  by rewrite chain_mor_nn /= (eq_irrelevance x_c x_c').
+  rewrite (maxn_idPl x_n) => nn x_n'.
+  by rewrite chain_mor_nn /= (eq_irrelevance x_n x_n').
 rewrite in_mu_chain_mor /in_mu -[LHS]reprK; congr \pi.
 by case: (repr x).
 Qed.
@@ -1817,6 +1820,92 @@ have en : in_mu_emb n =1 comp_emb (@chain_mor n (maxn n m) xc) (in_mu_emb _).
   by move=> x' /=; rewrite in_mu_chain_mor.
 by rewrite (f_ext em) (f_ext en) !f_comp /= => ->.
 Qed.
+
+Lemma unroll_appr (x y : {mu F}) : unroll x ⊑ unroll y = x ⊑ y.
+Proof.
+elim/quotP: x => [[ /= [|n] x] _]; first by case: x.
+elim/quotP: y => [[ /= [|m] y] _]; first by case: y.
+rewrite !unrollE.
+have h : forall a b (e : a <= b),
+  in_mu_emb a =1 comp_emb (chain_mor e) (in_mu_emb b).
+- by move=> a b e ?; rewrite /= in_mu_chain_mor.
+rewrite (f_ext (h _ _ (leq_maxl n m))).
+rewrite (f_ext (h _ _ (leq_maxr n m))).
+rewrite !f_comp /= -emb_appr pi_appr /=.
+move: {-}(leq_maxl n m); rewrite -ltnS => l.
+move: {-}(leq_maxr n m); rewrite -ltnS => r.
+rewrite !(@invlim_apprE (Tagged chain x) (Tagged chain y) _ l r) /=.
+by rewrite (chain_morS (leq_maxl n m) l x) (chain_morS (leq_maxr n m) r y).
+Qed.
+
+Lemma unroll_inj : injective unroll.
+Proof.
+move=> x y xy; apply/anti_appr.
+by rewrite -!unroll_appr xy !apprxx.
+Qed.
+
+Lemma unroll_sur (x : F [domType of {mu F}]) :
+  exists y : {mu F}, unroll y == x.
+Proof.
+(* FIXME: The type of sT below is huge and slows down everything *)
+have [/= sT [{x} x ->]] := f_cont x.
+have [/= n [sS e_sT]] := mu_inv sT.
+have /lub_closedP/eqP sS_clos : lub_closed (mem sS).
+  move=> x1 x2 in_sS1 in_sS2 x12 e_x12.
+  have in_sT1 : in_mu x1 \in sT.
+    by rewrite inE /= e_sT; apply/imfsetP; eauto.
+  have in_sT2 : in_mu x2 \in sT.
+    by rewrite inE /= e_sT; apply/imfsetP; eauto.
+  have {e_x12} e_x12 : in_mu x1 ⊔ in_mu x2 = Some (in_mu x12).
+    by rewrite emb_lub e_x12.
+  have /eqP/lub_closedP := valP sT.
+  move=> /(_ _ _ in_sT1 in_sT2 _ e_x12).
+  rewrite /= e_sT inE mem_imfset_inj //.
+  exact/emb_inj.
+move: e_sT.
+have [{sS sS_clos} sS -> /= e_sT] : exists sS' : {lcset chain n}, sS = val sS'.
+  by exists (LCSet sS_clos).
+have in_mu_sur : forall y : sT, exists y' : sS, (val y == in_mu y').
+- move=> [/= y]; rewrite inE /= e_sT; case/imfsetP=> y' in_sS ->.
+  by exists (Sub y' in_sS).
+pose S_of_T (y : sT) : sS := xchoose (in_mu_sur y).
+pose T_of_S (x : sS) : option sT := (retr_emb sT)^r (in_mu x).
+have S_of_TP : emb_class_of S_of_T T_of_S; first split.
+- move=> y; rewrite /S_of_T /T_of_S /=.
+  move: (xchooseP (in_mu_sur y)) => /eqP <- /=.
+  rewrite /pcomp retractK /= ?valK //.
+  move: (valP sT) => /= /eqP ->.
+  exact/valP.
+- move=> x' y'.
+  have in_sT : in_mu y' \in sT.
+    rewrite inE /= e_sT mem_imfset_inj; first exact/valP.
+    exact/emb_inj.
+  rewrite /S_of_T /T_of_S /= /pcomp retractK /=; last first.
+    by move: (valP sT)=> /eqP ->.
+  rewrite (insubT (mem sT) in_sT) oapprE.
+  move: (xchooseP (in_mu_sur x'))=> /eqP /=.
+  by rewrite !appr_val /= => e; rewrite {2}e -!emb_appr.
+pose S_of_T_emb : {emb sT -> sS} := Embedding S_of_TP.
+exists (@in_mu n.+1 (f_mor F (comp_emb S_of_T_emb (retr_emb sS)) x)).
+apply/eqP; rewrite /in_mu /= unrollE.
+move: (@f_comp F _ _ _ (in_mu_emb n) (comp_emb S_of_T_emb (retr_emb sS)) x).
+move=> /= <-; apply/f_ext=> y /=.
+by rewrite /S_of_T; move: (xchooseP (in_mu_sur y)) => /eqP <-.
+Qed.
+
+Definition roll (x : F [domType of {mu F}]) : {mu F} :=
+  xchoose (unroll_sur x).
+
+Lemma rollK : cancel roll unroll.
+Proof.
+move=> x; apply/eqP; rewrite /roll; exact/(xchooseP (unroll_sur x)).
+Qed.
+
+Lemma unrollK : cancel unroll roll.
+Proof. exact/(inj_can_sym rollK unroll_inj). Qed.
+
+Lemma roll_appr (x y : F [domType of {mu F}]) : roll x ⊑ roll y = x ⊑ y.
+Proof. by rewrite -unroll_appr !rollK. Qed.
 
 End InverseLimit.
 
