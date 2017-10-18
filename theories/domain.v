@@ -1581,71 +1581,6 @@ Qed.
 
 Implicit Types x y : {n : nat & chain n}.
 
-(*Definition bump x : {n : nat & chain n} :=
-  Tagged chain (chain_mor1 _ (tagged x)).
-
-Definition unbump x : option {n : nat & chain n} :=
-  match tag x as n return chain n -> _ with
-  | 0    => fun _ => None
-  | n.+1 => fun a => omap (Tagged chain) ((chain_mor1 n)^r a)
-  end (tagged x).
-
-Lemma bump_embP : emb_class_of bump unbump.
-Proof.
-rewrite /bump /unbump; split.
-  by move=> [n x] /=; rewrite emb_appK.
-case=> [n x] [m y]; rewrite tag_apprE.
-case: (altP (n.+1 =P m)) y => [<- {m}|ne] y //=.
-  rewrite tagged_asE emb_retP.
-  case: ((chain_mor1 n)^r y)=> [y'|] //=.
-  by rewrite !oapprE tag_apprE /= eqxx tagged_asE.
-case: m y ne => [|m] y //=; rewrite eqSS => ne.
-case: ((chain_mor1 m)^r y)=> [y'|] //=.
-by rewrite oapprE tag_apprE /= (negbTE ne).
-Qed.
-Canonical bump_emb := Embedding bump_embP.
-
-Definition piter T n (f : T -> option T) :=
-  iter n (obind f) \o Some.
-
-Lemma pcan_piter T n (f : T -> T) (g : T -> option T) :
-  pcancel f g -> pcancel (iter n f) (piter n g).
-Proof.
-move=> pcan; rewrite /piter /=; elim: n=> [|n IH] //= x.
-move: (IH (f x)); rewrite iterSr /= => -> /=.
-by rewrite pcan.
-Qed.
-
-Lemma iter_embP T n (e : {emb T -> T}) : emb_class_of (iter n e) (piter n e^r).
-Proof.
-split; first exact/pcan_piter/emb_appK.
-rewrite /piter; elim: n=> [|n IH] //= x y.
-rewrite emb_retP -iterS iterSr /=.
-case: (e^r y)=> [z|] //=; first by rewrite -IH.
-suff -> : iter n (obind e^r) None = None by [].
-by elim: n {IH x y} => //= n ->.
-Qed.
-Canonical iter_emb T n e := Embedding (@iter_embP T n e).
-
-Definition bump_to c x := iter (c - tag x) bump x.
-
-Lemma tag_bump_to c x : tag (bump_to c x) = maxn c (tag x).
-Proof.
-rewrite /bump_to maxnC maxnE addnC.
-by elim: (c - tag x)=> [//|n /= ->].
-Qed.
-
-Lemma bump_toD c1 c2 x :
-  bump_to c1 (bump_to c2 x) = bump_to (maxn c1 c2) x.
-Proof.
-rewrite {1}/bump_to tag_bump_to /bump_to -iter_add.
-have e : forall a b, a - b = maxn a b - b.
-  by move=> a b; rewrite -[LHS](addKn b) -maxnE maxnC.
-congr iter.
-by rewrite e [c2 - _]e addnBA ?subnK ?leq_maxr // [RHS]e maxnA.
-Qed.
-*)
-
 Definition invlim_appr x y : bool :=
   chain_mor (leq_maxl (tag x) (tag y)) (tagged x)
   ⊑ chain_mor (leq_maxr (tag x) (tag y)) (tagged y).
@@ -1670,20 +1605,6 @@ Definition invlim_lub x y :=
   omap (Tagged chain)
        (chain_mor (leq_maxl (tag x) (tag y)) (tagged x)
         ⊔ chain_mor (leq_maxr (tag x) (tag y)) (tagged y)).
-
-(*
-Lemma invlim_lubE x y c (xc : tag x <= c) (yc : tag y <= c) :
-  omap (bump_to c) (invlim_lub x y) = bump_to c x ⊔ bump_to c y.
-Proof.
-case/andP=> [xc yc]; rewrite /invlim_lub.
-rewrite -{2}(maxn_idPl yc) -{3}(maxn_idPl xc) -!bump_toD.
-have : tag (bump_to (tag y) x) = tag (bump_to (tag x) y).
-  by rewrite !tag_bump_to maxnC.
-move: (bump_to (tag y) x) (bump_to (tag x) y) => {x y xc yc} [n x] [m y].
-move=> /= exy; move: exy y => <- {m} y.
-rewrite /bump_to /= emb_lub tag_lubE /= eqxx tagged_asE; by case: (x ⊔ y).
-Qed.
-*)
 
 Lemma invlim_lubP : QDom.axioms invlim_appr invlim_lub.
 Proof.
@@ -1908,9 +1829,6 @@ Lemma roll_appr (x y : F [domType of {mu F}]) : roll x ⊑ roll y = x ⊑ y.
 Proof. by rewrite -unroll_appr !rollK. Qed.
 
 End InverseLimit.
-
-(*Prenex Implicits bump.
-Prenex Implicits unbump.*)
 
 Notation "{ 'emb' T }" := (embedding_of (Phant T))
   (at level 0, format "{ 'emb'  T }") : type_scope.
