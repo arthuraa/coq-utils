@@ -10,3 +10,4 @@ theories/nominal.v
 theories/fmap.v
 theories/ord.v
 theories/string.v
+theories/domain.v
