@@ -18,7 +18,7 @@ Module Dom.
 
 Section ClassDef.
 
-(* XXX: There could be subsumed by an nary version *)
+(* XXX: This could be subsumed by an nary version *)
 Definition is_lub T (appr : rel T) (x y : T) (o : option T) :=
   forall z,
     appr x z && appr y z
