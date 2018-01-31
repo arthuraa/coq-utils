@@ -2,7 +2,7 @@ From mathcomp
 Require Import
   ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype generic_quotient.
 
-Require Import void ord fset fmap.
+Require Import void ord fset fmap nominal.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -902,6 +902,21 @@ Definition fmap_domMixin := DomMixin flubP.
 Canonical fmap_domType :=
   Eval hnf in DomType {fmap T -> S} fmap_domMixin.
 
+Lemma domm_appr f g : f ⊑ g -> fsubset (domm f) (domm g).
+Proof.
+move=> /fapprP fg; apply/fsubsetP=> x; rewrite 2!mem_domm.
+by move: (fg x); case: (f x) (g x)=> [y1|] //= [y2|] //=.
+Qed.
+
+Lemma domm_lub f g h : f ⊔ g = Some h -> domm h = domm f :|: domm g.
+Proof.
+move=> fg; apply/eqP; rewrite eqEfsubset fsubUset !domm_appr ?andbT;
+try by [apply: lub_apprR fg|apply: lub_apprL fg].
+move: fg; rewrite /lub /= /flub /=; case: ifP=> // _ [<- {h}].
+apply/fsubsetP=> x; rewrite domm_mkfmapfp in_fset mem_filter.
+by case/andP.
+Qed.
+
 End FMapDom.
 
 Module SubDom.
@@ -1299,6 +1314,71 @@ rewrite fg apprxx.
 Qed.
 
 End IncFunDom.
+
+Section MemoryDef.
+
+Variable T : Type.
+
+CoInductive memory := Memory of {fmap name -> T}.
+
+Definition fmap_of_memory (m : memory) := let: Memory m := m in m.
+
+Canonical memory_newType := [newType for fmap_of_memory].
+
+End MemoryDef.
+
+Definition load (T : Type) (m : memory T) (n : name) := val m n.
+Coercion load : memory >-> Funclass.
+
+Definition memory_eqMixin (T : eqType) :=
+  [eqMixin of memory T by <:].
+Canonical memory_eqType (T : eqType) :=
+  Eval hnf in EqType (memory T) (memory_eqMixin T).
+Definition memory_choiceMixin (T : choiceType) :=
+  [choiceMixin of memory T by <:].
+Canonical memory_choiceType (T : choiceType) :=
+  Eval hnf in ChoiceType (memory T) (memory_choiceMixin T).
+Definition memory_ordMixin (T : ordType) :=
+  [ordMixin of memory T by <:].
+Canonical memory_ordType (T : ordType) :=
+  Eval hnf in OrdType (memory T) (memory_ordMixin T).
+
+Section MemoryDom.
+
+Variable T : domType.
+
+Implicit Types m : memory T.
+
+Definition memory_appr m1 m2 :=
+  [&& domm (val m1) == domm (val m2) & val m1 ⊑ val m2].
+
+Definition memory_lub m1 m2 :=
+  if domm (val m1) == domm (val m2) then
+    omap (@Memory _) (val m1 ⊔ val m2)
+  else None.
+
+Lemma memory_lubP : Dom.axioms memory_appr memory_lub.
+Proof.
+rewrite /memory_appr /memory_lub; split.
+- by move=> m; rewrite eqxx apprxx.
+- move=> m2 m1 m3 /andP [/eqP -> H12] /andP [->] /=.
+  exact: appr_trans H12.
+- move=> m1 m2 /andP [/andP [_ H12] /andP [_ H21]].
+  by apply/val_inj/anti_appr/andP; split.
+move=> m1 m2 m3; case: ifP=> [/eqP e12|ne12]; last first.
+  by case: eqP => [<-|//]; rewrite eq_sym ne12 /= andbF.
+rewrite -e12; move: (is_lub_lub (val m1) (val m2) (val m3)).
+case: (altP (_ =P _)) => [e13 ->|ne13].
+  case lub12: (val m1 ⊔ val m2)=> [m12|] //=.
+  by rewrite (domm_lub lub12) -e12 fsetUid e13 eqxx.
+case lub12: (val m1 ⊔ val m2)=> [m12|] //=.
+by rewrite (domm_lub lub12) -e12 fsetUid (negbTE ne13).
+Qed.
+
+Definition memory_domMixin := DomMixin memory_lubP.
+Canonical memory_domType := Eval hnf in DomType (memory T) memory_domMixin.
+
+End MemoryDom.
 
 (* FIXME: These probably belong somewhere else *)
 
