@@ -1177,7 +1177,7 @@ have [/allP coh|/allPn [x x_in incoh]] :=
       move=> gi_x''; move: (retract_lub_closure e_gi_x').
       case/increasingP: (valP gi)=> /lub_closed_closure -> _.
       by rewrite mem_domm gi_x''.
-    by case/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
+    by move/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
   have fgE : forall x, obind fg (retract clos x)
                        = odflt None (inc_app fi x ⊔ inc_app gi x).
     move=> x; rewrite fE gE; case ex: (retract clos x)=> [x'|] //=.
