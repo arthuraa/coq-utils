@@ -2385,6 +2385,8 @@ End FreeRestriction.
 Notation "{ 'restr' T }" := (restr_of (Phant T))
   (at level 0, format "{ 'restr'  T }") : type_scope.
 
+Existing Instance Restr_eqvar.
+
 Section FreeRestrictionTheory.
 
 Local Open Scope fset_scope.
