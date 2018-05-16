@@ -2,7 +2,7 @@ From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype tuple bigop
   generic_quotient.
 
-Require Import ord fset fmap fperm.
+From extructures Require Import ord fset fmap fperm.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -144,8 +144,8 @@ Record mixin_of T := Mixin {
         n \in names x -> rename (fperm2 n n') x = x -> n' \in names x
 }.
 
-Record class_of T := Class {base : Ord.Total.class_of T; mixin : mixin_of T}.
-Local Coercion base : class_of >-> Ord.Total.class_of.
+Record class_of T := Class {base : Ord.class_of T; mixin : mixin_of T}.
+Local Coercion base : class_of >-> Ord.class_of.
 
 Structure type := Pack {sort; _ : class_of sort; _ : Type}.
 Local Coercion sort : type >-> Sortclass.
@@ -156,24 +156,24 @@ Let xT := let: Pack T _ _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack m :=
-  fun b bT & phant_id (Ord.Total.class bT) b => Pack (@Class T b m) T.
+  fun b bT & phant_id (Ord.class bT) b => Pack (@Class T b m) T.
 
 (* Inheritance *)
 Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Total.Pack cT xclass xT.
+Definition ordType := @Ord.Pack cT xclass xT.
 
 End ClassDef.
 
 Module Import Exports.
-Coercion base : class_of >-> Ord.Total.class_of.
+Coercion base : class_of >-> Ord.class_of.
 Coercion mixin : class_of >-> mixin_of.
 Coercion sort : type >-> Sortclass.
 Coercion eqType : type >-> Equality.type.
 Canonical eqType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
-Coercion ordType : type >-> Ord.Total.type.
+Coercion ordType : type >-> Ord.type.
 Canonical ordType.
 Notation nominalType := type.
 Notation nominalMixin := mixin_of.
@@ -535,7 +535,7 @@ Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0 T)) :=
 (* Inheritance *)
 Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Total.Pack cT xclass xT.
+Definition ordType := @Ord.Pack cT xclass xT.
 Definition nominalType := @Nominal.Pack cT xclass xT.
 
 End ClassDef.
@@ -548,7 +548,7 @@ Coercion eqType : type >-> Equality.type.
 Canonical eqType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
-Coercion ordType : type >-> Ord.Total.type.
+Coercion ordType : type >-> Ord.type.
 Canonical ordType.
 Coercion nominalType : type >-> Nominal.type.
 Canonical nominalType.
@@ -1973,7 +1973,7 @@ Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0 T)) :=
 (* Inheritance *)
 Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Total.Pack cT xclass xT.
+Definition ordType := @Ord.Pack cT xclass xT.
 Definition nominalType := @Nominal.Pack cT xclass xT.
 
 End ClassDef.
@@ -1986,7 +1986,7 @@ Coercion eqType : type >-> Equality.type.
 Canonical eqType.
 Coercion choiceType : type >-> Choice.type.
 Canonical choiceType.
-Coercion ordType : type >-> Ord.Total.type.
+Coercion ordType : type >-> Ord.type.
 Canonical ordType.
 Coercion nominalType : type >-> Nominal.type.
 Canonical nominalType.
