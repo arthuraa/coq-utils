@@ -209,8 +209,8 @@ Variable T : nominalType.
 
 Implicit Types (s : {fperm name}) (x : T).
 
-Lemma renameD s1 s2 x : rename s1 (rename s2 x) = rename (s1 * s2) x.
-Proof. by case: T s1 s2 x=> [? [? [?? []]] ?]. Qed.
+Lemma renameA s1 s2 x : rename s1 (rename s2 x) = rename (s1 * s2) x.
+Proof. by case: T s1 s2 x=> [? [? [? ? []]] ?]. Qed.
 
 Lemma namesTeq n n' x :
   n \in names x -> rename (fperm2 n n') x = x -> n' \in names x.
@@ -234,10 +234,10 @@ Lemma rename1 x : rename 1 x = x.
 Proof. by rewrite -(fperm2xx (fresh (names x))) namesNNE // freshP. Qed.
 
 Lemma renameK s : cancel (@rename T s) (@rename T s^-1).
-Proof. by move=> x; rewrite renameD fperm_mulVs rename1. Qed.
+Proof. by move=> x; rewrite renameA fperm_mulVs rename1. Qed.
 
 Lemma renameKV s : cancel (@rename T s^-1) (rename s).
-Proof. by move=> x; rewrite renameD fperm_mulsV rename1. Qed.
+Proof. by move=> x; rewrite renameA fperm_mulsV rename1. Qed.
 
 Lemma rename_inj s : injective (@rename T s).
 Proof. exact: (can_inj (renameK s)). Qed.
@@ -263,7 +263,7 @@ have {dis} /IH dis: fdisjoint (supp s) (names x).
   rewrite mem_supp fpermM /=; case: fperm2P; last by rewrite -mem_supp.
     by rewrite -fperm_supp in Pn''; move=> e; rewrite e (negbTE Pn) in Pn''.
   by move=> _; apply: contra Pn=> /eqP ->.
-by rewrite -renameD dis namesNNE.
+by rewrite -renameA dis namesNNE.
 Qed.
 
 Lemma names0P x : reflect (forall s, rename s x = x) (names x == fset0).
@@ -279,7 +279,7 @@ Lemma eq_in_rename s1 s2 x :
   {in names x, s1 =1 s2} ->
   rename s1 x = rename s2 x.
 Proof.
-move=> e; apply: (canRL (renameKV s2)); rewrite renameD.
+move=> e; apply: (canRL (renameKV s2)); rewrite renameA.
 apply/renameJ/fdisjointP=> n; rewrite mem_supp fpermM /=.
 by rewrite (can2_eq (fpermKV s2) (fpermK _)); apply/contra=> /e ->.
 Qed.
@@ -294,13 +294,13 @@ rewrite (mem_imfset_can _ _ (fpermKV s) (fpermK s)).
 apply/(sameP idP)/(iffP idP)=> Pn.
   apply/(@mem_names _ _ (names x :|: supp s))=> n'.
   rewrite in_fsetU negb_or=> /andP [n'_fresh /suppPn n'_fix].
-  rewrite renameD -n'_fix -fperm2J fperm_mulsKV -renameD.
+  rewrite renameA -n'_fix -fperm2J fperm_mulsKV -renameA.
   rewrite (inj_eq (@rename_inj s)); apply: contra n'_fresh=> /eqP.
   by apply/namesTeq.
 apply/(@mem_names _ _ (names (rename s x) :|: supp s))=> n'.
 rewrite in_fsetU negb_or=> /andP [n'_fresh /suppPn n'_fix].
-rewrite -(inj_eq (@rename_inj s)) renameD -(fperm_mulsKV s (_ * _)).
-rewrite fperm2J n'_fix -renameD; apply: contra n'_fresh=> /eqP.
+rewrite -(inj_eq (@rename_inj s)) renameA -(fperm_mulsKV s (_ * _)).
+rewrite fperm2J n'_fix -renameA; apply: contra n'_fresh=> /eqP.
 by apply/namesTeq.
 Qed.
 
@@ -312,7 +312,7 @@ Qed.
 
 End Basics.
 
-Prenex Implicits renameD rename1 renameK renameKV rename_inj.
+Prenex Implicits renameA rename1 renameK renameKV rename_inj.
 
 Section NameNominal.
 
@@ -325,17 +325,15 @@ Definition name_rename s n := s n.
 
 Definition name_names n := fset1 n.
 
-Lemma name_nominalAxioms : Nominal.axioms name_rename name_names.
+Lemma name_renameP : Nominal.axioms name_rename name_names.
 Proof.
-split.
-- move=> s1 s2 n; by rewrite /name_rename /= fpermM.
-- move=> n n' n''.
-  rewrite /name_names /name_rename !in_fset1 !(eq_sym _ n''); exact: fperm2D.
-- move=> n n' n''; rewrite /name_rename /name_names=> /fset1P <-{n''}.
-  by rewrite in_fset1 fperm2L=> ->.
+rewrite /name_rename /name_names; split.
+- by move=> ???; rewrite fpermM.
+- by move=> n n' n''; rewrite !in_fset1 !(eq_sym _ n''); apply: fperm2D.
+- by move=> n n' n'' /fset1P <-{n''}; rewrite in_fset1 fperm2L=> ->.
 Qed.
 
-Definition name_nominalMixin := NominalMixin name_nominalAxioms.
+Definition name_nominalMixin := NominalMixin name_renameP.
 Canonical name_nominalType := Eval hnf in NominalType name name_nominalMixin.
 
 Lemma renamenE s n : rename s n = s n. Proof. by []. Qed.
@@ -487,13 +485,10 @@ Definition trivial_rename s x := x.
 
 Definition trivial_names x := fset0 : {fset name}.
 
-Lemma trivial_nominalAxioms : Nominal.axioms trivial_rename trivial_names.
+Lemma trivial_renameP : Nominal.axioms trivial_rename trivial_names.
 Proof. by split. Qed.
 
-Definition DefNominalMixin := NominalMixin trivial_nominalAxioms.
-
-Definition DefMixin :=
-  @Mixin (NominalType T DefNominalMixin) (fun _ _ => erefl).
+Definition DefNominalMixin := NominalMixin trivial_renameP.
 
 End Mixins.
 
@@ -623,17 +618,18 @@ Definition prod_rename s p := (rename s p.1, rename s p.2).
 
 Definition prod_names p := names p.1 :|: names p.2.
 
-Lemma prod_nominalAxioms : Nominal.axioms prod_rename prod_names.
+Lemma prod_renameP : Nominal.axioms prod_rename prod_names.
 Proof.
-split.
-- move=> ??; by case=> [x y]; rewrite /prod_rename /= !renameD.
-- move=> ?? [x y] /=; rewrite /prod_rename/prod_names /= 2!in_fsetU 2!negb_or.
-  by move=> /andP [??] /andP [??]; rewrite 2?namesNNE.
-- move=> ?? [x y]; rewrite /prod_names !in_fsetU /prod_rename /=.
-  by case/orP=> ? [??]; apply/orP; eauto using namesTeq.
+rewrite /prod_rename /prod_names; split.
+- by move=> ?? [x y]; rewrite !renameA.
+- by move=> ?? [x y] /=; rewrite /= 2!in_fsetU 2!negb_or=>
+  /andP [??] /andP [??]; rewrite 2?namesNNE.
+- by move=> ?? [x y]; rewrite !in_fsetU /=
+  => /orP /= [h_in|h_in] [??]; apply/orP; [left|right];
+  eauto using namesTeq.
 Qed.
 
-Definition prod_nominalMixin := NominalMixin prod_nominalAxioms.
+Definition prod_nominalMixin := NominalMixin prod_renameP.
 Canonical prod_nominalType :=
   Eval hnf in NominalType (T' * S') prod_nominalMixin.
 
@@ -660,11 +656,10 @@ Definition seq_rename s xs := map (rename s) xs.
 
 Definition seq_names xs := \bigcup_(x <- xs) names x.
 
-Lemma seq_nominalAxioms : Nominal.axioms seq_rename seq_names.
+Lemma seq_renameP : Nominal.axioms seq_rename seq_names.
 Proof.
-split.
-- move=> s1 s2 ?.
-  by rewrite /seq_rename -map_comp (eq_map (@renameD T' s1 s2)).
+rewrite /seq_rename /seq_names; split.
+- by move=> ???; rewrite -map_comp (eq_map (@renameA T' _ _)).
 - move=> n n' xs h1 h2.
   have h: forall n x, n \notin seq_names xs -> x \in xs -> n \notin names x.
     move=> {n n' h1 h2} n x Pn /seq_tnthP [i ->]; apply: contra Pn.
@@ -672,8 +667,7 @@ split.
     apply/bigcup_sup=> //; exact: mem_index_enum.
   rewrite /seq_rename -[in RHS](map_id xs); apply/eq_in_map=> x Px.
   by apply namesNNE; eauto.
-- move=> n n' xs.
-  rewrite /seq_names big_tnth => /bigcup_finP [i _ Pin e].
+- move=> n n' xs; rewrite big_tnth => /bigcup_finP [i _ Pin e].
   suff e': rename (fperm2 n n') (tnth (in_tuple xs) i) = tnth (in_tuple xs) i.
     move: {e e'} n' (namesTeq Pin e'); apply/fsubsetP.
     apply/bigcup_sup=> //; exact: mem_index_enum.
@@ -681,7 +675,7 @@ split.
   by move: {Pin} i (tnth _ _)=> [i Pi] /= x; rewrite -{2}e {e} (nth_map x).
 Qed.
 
-Definition seq_nominalMixin := NominalMixin seq_nominalAxioms.
+Definition seq_nominalMixin := NominalMixin seq_renameP.
 Canonical seq_nominalType := Eval hnf in NominalType (seq T') seq_nominalMixin.
 
 Lemma renamesE s xs : rename s xs = [seq rename s x | x <- xs].
@@ -776,15 +770,15 @@ Definition sum_names x :=
   | inr x => names x
   end.
 
-Lemma sum_nominalAxioms : Nominal.axioms sum_rename sum_names.
+Lemma sum_renameP : Nominal.axioms sum_rename sum_names.
 Proof.
 split.
-- by move=> ?? [] x //=; rewrite renameD.
-- by move=> ?? [] x //= => /namesNNE h /h ->.
-- by move=> ?? [] x /namesTeq Pin [/Pin ?].
+- by move=> ?? [x|x] //=; rewrite renameA.
+- by move=> ?? [x|x] //= => /namesNNE h /h ->.
+- by move=> ?? [x|x] /namesTeq Pin [/Pin ?].
 Qed.
 
-Definition sum_nominalMixin := NominalMixin sum_nominalAxioms.
+Definition sum_nominalMixin := NominalMixin sum_renameP.
 Canonical sum_nominalType := Eval hnf in NominalType (T + S) sum_nominalMixin.
 
 End SumNominalType.
@@ -802,23 +796,15 @@ Definition option_names x :=
   | None => fset0
   end.
 
-Lemma option_renameD s1 s2 x :
-  option_rename s1 (option_rename s2 x) = option_rename (s1 * s2) x.
-Proof. by case: x=> [x|] //=; rewrite renameD. Qed.
+Lemma option_renameP : Nominal.axioms option_rename option_names.
+Proof.
+split.
+- by move=> ?? [x|] //=; rewrite renameA.
+- by move=> ?? [x|] //= => /namesNNE h /h ->.
+- by move=> ?? [x|] // /namesTeq Pin [/Pin ?].
+Qed.
 
-Lemma option_namesNNE n n' x :
-  n \notin option_names x -> n' \notin option_names x ->
-  option_rename (fperm2 n n') x = x.
-Proof. by case: x=> [x|] //= => /namesNNE h /h ->. Qed.
-
-Lemma option_namesTeq n n' x :
-  n \in option_names x ->
-  option_rename (fperm2 n n') x = x ->
-  n' \in option_names x.
-Proof. by case: x=> [x /namesTeq P [/P e]|]. Qed.
-
-Definition option_nominalMixin :=
-  NominalMixin (Nominal.Axioms option_renameD option_namesNNE option_namesTeq).
+Definition option_nominalMixin := NominalMixin option_renameP.
 Canonical option_nominalType :=
   Eval hnf in NominalType (option S') option_nominalMixin.
 
@@ -886,45 +872,30 @@ Implicit Type X : {fset T'}.
 
 Definition fset_rename s X := rename s @: X.
 
-Definition fset_names X :=
-  \bigcup_(x <- X) names x.
+Definition fset_names X := \bigcup_(x <- X) names x.
 
-Lemma fset_renameD s1 s2 X :
-  fset_rename s1 (fset_rename s2 X) = fset_rename (s1 * s2) X.
+Lemma fset_renameP : Nominal.axioms fset_rename fset_names.
 Proof.
-by rewrite /fset_rename -imfset_comp; apply/eq_imfset/renameD.
-Qed.
-
-Lemma fset_namesNNE n n' X :
-  n \notin fset_names X -> n' \notin fset_names X ->
-  fset_rename (fperm2 n n') X = X.
-Proof.
-move=> Pn Pn'; rewrite -[in RHS](imfset_id X).
-apply: eq_in_imfset=> x x_in; apply: renameJ.
-apply/fdisjointP=> n'' /(fsubsetP (fsubset_supp_fperm2 n n')).
-have sub: fsubset (names x) (fset_names X).
-  case/seq_tnthP: x_in=> [/= i ->]; rewrite /fset_names big_tnth.
+rewrite /fset_rename /fset_names; split.
+- by move=> *; rewrite -imfset_comp; apply/eq_imfset/renameA.
+- move=> n n' X Pn Pn'; rewrite -[in RHS](imfset_id X).
+  apply: eq_in_imfset=> x x_in; apply: renameJ.
+  apply/fdisjointP=> n'' /(fsubsetP (fsubset_supp_fperm2 n n')).
+  have sub: fsubset (names x) (fset_names X).
+    case/seq_tnthP: x_in=> [/= i ->]; rewrite /fset_names big_tnth.
+    by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
+  by case/fset2P=> ->; [move: Pn|move: Pn']; apply: contra; [move: n|move: n'];
+  apply/fsubsetP.
+- move=> n n' X; rewrite big_tnth => /bigcup_finP [i _ Pi] e.
+  have {i Pi} [x x_in Pn] : exists2 x, x \in X & n \in names x.
+    by eexists; eauto; apply: mem_tnth.
+  move: x_in Pn; rewrite -{1}e => /imfsetP [y Py ->]; rewrite names_rename.
+  rewrite (mem_imfset_can _ _ (fpermK _) (fpermKV _)) fperm2V fperm2L.
+  case/seq_tnthP: Py=> {y} [y ->]; move: {e} n'; apply/fsubsetP.
   by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
-by case/fset2P=> ->; [move: Pn|move: Pn']; apply: contra; [move: n|move: n'];
-apply/fsubsetP.
 Qed.
 
-Lemma fset_namesTeq n n' X :
-  n \in fset_names X ->
-  fset_rename (fperm2 n n') X = X ->
-  n' \in fset_names X.
-Proof.
-rewrite /fset_names /fset_rename big_tnth => /bigcup_finP [i _ Pi] e.
-have {i Pi} [x x_in Pn] : exists2 x, x \in X & n \in names x.
-  by eexists; eauto; apply: mem_tnth.
-move: x_in Pn; rewrite -{1}e => /imfsetP [y Py ->]; rewrite names_rename.
-rewrite (mem_imfset_can _ _ (fpermK _) (fpermKV _)) fperm2V fperm2L.
-case/seq_tnthP: Py=> {y} [y ->]; move: {e} n'; apply/fsubsetP.
-by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
-Qed.
-
-Definition fset_nominalMixin :=
-  NominalMixin (Nominal.Axioms fset_renameD fset_namesNNE fset_namesTeq).
+Definition fset_nominalMixin := NominalMixin fset_renameP.
 Canonical fset_nominalType :=
   Eval hnf in NominalType (FSet.fset_type T') fset_nominalMixin.
 Canonical fset_of_nominalType := Eval hnf in [nominalType of {fset T'}].
@@ -1035,8 +1006,8 @@ have dis' : finsupp_perm A (s^-1 * s' * s).
     by move=> ?? _ _; apply: fperm_inj.
   by move/eqP: dis=> ->; rewrite imfset0.
 rewrite -{1}[x](renameKV s) -(f1f2 (rename s^-1 x) _ erefl).
-rewrite -[LHS](renameKV s) 2![rename _ (rename _ (f1 _))]renameD.
-rewrite fperm_mulA fs_f1 f1f2 !renameD !fperm_mulA fperm_mulsK.
+rewrite -[LHS](renameKV s) 2![rename _ (rename _ (f1 _))]renameA.
+rewrite fperm_mulA fs_f1 f1f2 !renameA !fperm_mulA fperm_mulsK.
 by rewrite fperm_mulsV fperm_mul1s.
 Qed.
 
@@ -1068,85 +1039,63 @@ Definition fmap_rename s m :=
 Definition fmap_names m :=
   names (domm m) :|: names (codomm m).
 
-Lemma fmap_renameD s1 s2 m :
-  fmap_rename s1 (fmap_rename s2 m) = fmap_rename (s1 * s2) m.
+Lemma fmap_renameP : Nominal.axioms fmap_rename fmap_names.
 Proof.
-apply/eq_fmap=> x; rewrite /fmap_rename.
-set m1 := mkfmapfp _ (rename s2 @: domm m).
-have domm_m1: domm m1 = rename s2 @: domm m.
-  apply/eq_fset=> y; apply/(sameP idP)/(iffP idP).
-    case/imfsetP=> [{y} y Py ->]; apply/dommP.
-    case/dommP: (Py)=> [v m_y].
-    exists (rename s2 v); rewrite /m1 mkfmapfpE (mem_imfset (rename s2) Py).
-    by rewrite renameK m_y.
-  by move/dommP=> [v]; rewrite mkfmapfpE; case: ifP.
-rewrite domm_m1 -imfset_comp (eq_imfset (renameD _ _)).
-congr getm; apply/eq_mkfmapfp=> y; rewrite mkfmapfpE.
-rewrite (mem_imfset_can _ _ (renameK s2) (renameKV s2)) renameD.
-rewrite -fperm_inv_mul mem_domm; case e: (m (rename _ y)) => [z|] //=.
-by rewrite renameD.
+have names_dom s m: domm (fmap_rename s m) = rename s @: domm m.
+  apply/eq_fset=> x; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
+  apply/(sameP dommP)/(iffP dommP).
+    move=> [y Py]; exists (rename s y); rewrite mkfmapfpE.
+    by rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)) mem_domm Py /=.
+  case=> [y]; rewrite mkfmapfpE (mem_imfset_can _ _ (renameK _) (renameKV _)).
+  rewrite mem_domm renameoE; case e: (m (rename s^-1 x))=> [y'|] //=.
+  by move=> [e']; exists (rename s^-1 y); rewrite -e' renameK.
+have names_codom s m:   codomm (fmap_rename s m) = rename s @: codomm m.
+  apply/eq_fset=> y; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
+  apply/(sameP codommP)/(iffP codommP).
+    move=> [x Px]; exists (rename s x); rewrite mkfmapfpE.
+    rewrite (mem_imfset_inj _ _ (@rename_inj _ _)) mem_domm Px /= renameK Px.
+    by rewrite renameoE /= renameKV.
+  case=> [x]; rewrite mkfmapfpE (mem_imfset_can _ _ (renameK _) (renameKV _)).
+  rewrite mem_domm renameoE; case e: (m (rename s^-1 x))=> [x'|] //=.
+  by move=> [e']; exists (rename s^-1 x); rewrite -e' renameK.
+split.
+- move=> s1 s2 m; apply/eq_fmap=> x; rewrite /fmap_rename.
+  set m1 := mkfmapfp _ (rename s2 @: domm m).
+  have domm_m1: domm m1 = rename s2 @: domm m.
+    apply/eq_fset=> y; apply/(sameP idP)/(iffP idP).
+      case/imfsetP=> [{y} y Py ->]; apply/dommP.
+      case/dommP: (Py)=> [v m_y].
+      exists (rename s2 v); rewrite /m1 mkfmapfpE (mem_imfset (rename s2) Py).
+      by rewrite renameK m_y.
+    by move/dommP=> [v]; rewrite mkfmapfpE; case: ifP.
+  rewrite domm_m1 -imfset_comp (eq_imfset (renameA _ _)).
+  congr getm; apply/eq_mkfmapfp=> y; rewrite mkfmapfpE.
+  rewrite (mem_imfset_can _ _ (renameK s2) (renameKV s2)) renameA.
+  rewrite -fperm_inv_mul mem_domm; case e: (m (rename _ y)) => [z|] //=.
+  by rewrite renameA.
+- move=> n n' m; rewrite /fmap_names 2!in_fsetU 2!negb_or.
+  case/andP=> [/namesfsPn hn1 /namesfsPn hn2].
+  case/andP=> [/namesfsPn hn1' /namesfsPn hn2'].
+  apply/eq_fmap=> x; rewrite mkfmapfpE.
+  rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)) fperm2V mem_domm.
+  case e: (m x)=> [y|].
+    have x_def: x \in domm m by rewrite mem_domm e.
+    rewrite namesNNE; eauto; rewrite e /= renameoE /=.
+    have y_def: y \in domm (invm m) by apply/codommP; eauto.
+    by rewrite namesNNE; eauto.
+  case e': (m _)=> [y|] //=.
+  have x_def: rename (fperm2 n n') x \in domm m by rewrite mem_domm e'.
+  rewrite -(renameK (fperm2 n n') x) fperm2V namesNNE in e; eauto.
+  by rewrite e in e'.
+- move=> n n' m Pn e.
+  rewrite -{}e (_ : fmap_names _ = rename (fperm2 n n') (fmap_names m)).
+    rewrite -{1}(fperm2L n n') -renamenE renamefsE.
+    by rewrite (mem_imfset_inj _ _ (@rename_inj _ _)).
+  rewrite /fmap_names renamefsE imfsetU names_dom names_rename.
+  by rewrite names_codom names_rename.
 Qed.
 
-Lemma fmap_namesNNE n n' m :
-  n \notin fmap_names m -> n' \notin fmap_names m ->
-  fmap_rename (fperm2 n n') m = m.
-Proof.
-rewrite /fmap_names 2!in_fsetU 2!negb_or
-  => /andP[/namesfsPn hn1 /namesfsPn hn2]
-     /andP[/namesfsPn hn1' /namesfsPn hn2'].
-apply/eq_fmap=> x; rewrite mkfmapfpE.
-rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)) fperm2V mem_domm.
-case e: (m x)=> [y|].
-  have x_def: x \in domm m by rewrite mem_domm e.
-  rewrite namesNNE; eauto; rewrite e /= renameoE /=.
-  have y_def: y \in domm (invm m) by apply/codommP; eauto.
-  by rewrite namesNNE; eauto.
-case e': (m _)=> [y|] //=.
-have x_def: rename (fperm2 n n') x \in domm m by rewrite mem_domm e'.
-rewrite -(renameK (fperm2 n n') x) fperm2V namesNNE in e; eauto.
-by rewrite e in e'.
-Qed.
-
-Let fmap_names_dom s m :
-  domm (fmap_rename s m) = rename s @: domm m.
-Proof.
-apply/eq_fset=> x; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
-apply/(sameP dommP)/(iffP dommP).
-  move=> [y Py]; exists (rename s y); rewrite mkfmapfpE.
-  by rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)) mem_domm Py /=.
-case=> [y]; rewrite mkfmapfpE (mem_imfset_can _ _ (renameK _) (renameKV _)).
-rewrite mem_domm renameoE; case e: (m (rename s^-1 x))=> [y'|] //=.
-by move=> [e']; exists (rename s^-1 y); rewrite -e' renameK.
-Qed.
-
-Let fmap_names_codom s m :
-  codomm (fmap_rename s m) = rename s @: codomm m.
-Proof.
-apply/eq_fset=> y; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
-apply/(sameP codommP)/(iffP codommP).
-  move=> [x Px]; exists (rename s x); rewrite mkfmapfpE.
-  rewrite (mem_imfset_inj _ _ (@rename_inj _ _)) mem_domm Px /= renameK Px.
-  by rewrite renameoE /= renameKV.
-case=> [x]; rewrite mkfmapfpE (mem_imfset_can _ _ (renameK _) (renameKV _)).
-rewrite mem_domm renameoE; case e: (m (rename s^-1 x))=> [x'|] //=.
-by move=> [e']; exists (rename s^-1 x); rewrite -e' renameK.
-Qed.
-
-Lemma fmap_namesTeq n n' m :
-  n \in fmap_names m ->
-  fmap_rename (fperm2 n n') m = m ->
-  n' \in fmap_names m.
-Proof.
-move=> Pn e.
-rewrite -{}e (_ : fmap_names _ = rename (fperm2 n n') (fmap_names m)).
-  rewrite -{1}(fperm2L n n') -renamenE renamefsE.
-  by rewrite (mem_imfset_inj _ _ (@rename_inj _ _)).
-rewrite /fmap_names renamefsE imfsetU fmap_names_dom names_rename.
-by rewrite fmap_names_codom names_rename.
-Qed.
-
-Definition fmap_nominalMixin :=
-  NominalMixin (Nominal.Axioms fmap_renameD fmap_namesNNE fmap_namesTeq).
+Definition fmap_nominalMixin := NominalMixin fmap_renameP.
 Canonical fmap_nominalType :=
   Eval hnf in NominalType (FMap.fmap_type T S) fmap_nominalMixin.
 Canonical fmap_of_nominalType :=
@@ -1387,29 +1336,17 @@ Definition subType_rename s x : sT :=
 
 Definition subType_names x := names (val x).
 
-Lemma subType_renameD s1 s2 x :
-  subType_rename s1 (subType_rename s2 x) =
-  subType_rename (s1 * s2) x.
-Proof. by apply: val_inj; rewrite /subType_rename /= !SubK renameD. Qed.
-
-Lemma subType_namesNNE n n' x :
-  n \notin subType_names x -> n' \notin subType_names x ->
-  subType_rename (fperm2 n n') x = x.
+Lemma subType_renameP : Nominal.axioms subType_rename subType_names.
 Proof.
-move=> n_nin n'_nin; apply: val_inj; rewrite /subType_rename /= !SubK.
-by apply: namesNNE.
+rewrite /subType_rename; split.
+- by move=> s1 s2 s; apply: val_inj; rewrite /= !SubK renameA.
+- move=> n n' x n_nin n'_nin; apply: val_inj; rewrite /= !SubK.
+  by apply: namesNNE.
+- move=> n n' x n_in /(f_equal val); rewrite /= !SubK.
+  by apply: namesTeq.
 Qed.
 
-Lemma subType_namesTeq n n' x :
-  n \in subType_names x -> subType_rename (fperm2 n n') x = x ->
-  n' \in subType_names x.
-Proof.
-move=> n_in /(f_equal val); rewrite /subType_rename /= !SubK.
-by apply: namesTeq.
-Qed.
-
-Definition nominalMixin :=
-  NominalMixin (Nominal.Axioms subType_renameD subType_namesNNE subType_namesTeq).
+Definition nominalMixin := NominalMixin subType_renameP.
 Definition nominalType := NominalType sT nominalMixin.
 
 Definition pack (sT : subType P) m & phant sT := Pack sT m.
@@ -1465,27 +1402,16 @@ Definition bij_rename s x := g (rename s (f x)).
 
 Definition bij_names x := names (f x).
 
-Lemma bij_renameD s1 s2 x :
-  bij_rename s1 (bij_rename s2 x) = bij_rename (s1 * s2) x.
-Proof. by rewrite /bij_rename /= gK renameD. Qed.
-
-Lemma bij_namesNNE n n' x :
-  n \notin bij_names x -> n' \notin bij_names x ->
-  bij_rename (fperm2 n n') x = x.
+Lemma bij_renameP : Nominal.axioms bij_rename bij_names.
 Proof.
-by rewrite /bij_names /bij_rename=> ? ?; rewrite namesNNE //.
+rewrite /bij_rename /bij_names; split.
+- by move=> ???; rewrite gK renameA.
+- by move=> ?????; rewrite namesNNE.
+- move=> ??? Pn h; apply: namesTeq; eauto.
+  by apply: (canRL gK).
 Qed.
 
-Lemma bij_namesTeq n n' x :
-  n \in bij_names x -> bij_rename (fperm2 n n') x = x ->
-  n' \in bij_names x.
-Proof.
-rewrite /bij_names /bij_rename=> Pn h; apply: namesTeq; eauto.
-by apply: (canRL gK).
-Qed.
-
-Definition BijNominalMixin :=
-  NominalMixin (Nominal.Axioms bij_renameD bij_namesNNE bij_namesTeq).
+Definition BijNominalMixin := NominalMixin bij_renameP.
 
 End TransferNominalType.
 
@@ -1542,7 +1468,7 @@ Lemma eq_trans : transitive eq.
 Proof.
 move=> z x y /eqP [s1 dis1 re1] /eqP [s2 dis2 re2].
 apply/eqP.
-exists (s2 * s1); last by rewrite -renameD re1.
+exists (s2 * s1); last by rewrite -renameA re1.
 move: {re2} dis2; rewrite -{}re1 -eq_l -names_eqvar -fsetD_eqvar.
 rewrite renameJ 1?namesfsnE // => dis2.
 by apply: (fdisjoint_trans (supp_mul _ _)); rewrite fdisjointUl dis2.
@@ -1704,7 +1630,7 @@ Definition bound_rename s xx := bind (rename s (unbind fset0 xx)).
 Let bound_rename_morph s x : bound_rename s (bind x) = bind (rename s x).
 Proof.
 rewrite /bound_rename; case: ubindP0=> s' dis _; apply/esym/bind_eqP.
-exists (s * s' * s^-1); last by rewrite -renameD renameK renameD.
+exists (s * s' * s^-1); last by rewrite -renameA renameK renameA.
 by rewrite suppJ -renamefsE -eq_l -names_eqvar -fsetD_eqvar -fdisjoint_eqvar.
 Qed.
 
@@ -1718,40 +1644,26 @@ rewrite /bound_names; case: ubindP0=> s' dis _.
 by rewrite -eq_l -names_eqvar -fsetD_eqvar renameJ // namesfsnE.
 Qed.
 
-Lemma bound_renameD s1 s2 xx :
-  bound_rename s1 (bound_rename s2 xx) =
-  bound_rename (s1 * s2) xx.
+Lemma bound_renameP : Nominal.axioms bound_rename bound_names.
 Proof.
-rewrite -[xx](unbindK fset0).
-rewrite bound_rename_morph //= bound_rename_morph //= ?renameD.
-by rewrite bound_rename_morph.
+split.
+- move=> s1 s2 xx; rewrite -[xx](unbindK fset0).
+  rewrite bound_rename_morph //= bound_rename_morph //= ?renameA.
+  by rewrite bound_rename_morph.
+- move=> n n' xx.
+  rewrite -[xx](unbindK fset0) bound_names_morph; move: (unbind _ _)=> {xx} x.
+  rewrite bound_rename_morph=> n_nin n'_nin; apply/esym/bind_eqP; eexists=> //.
+  apply: (fdisjoint_trans (fsubset_supp_fperm2 n n')).
+  by rewrite fdisjointC !fdisjointUr !fdisjoints1 n'_nin n_nin fdisjoints0.
+- move=> /= n n' xx.
+  rewrite -[xx](unbindK fset0) bound_names_morph; set s := fperm2 n n'.
+  move/(mem_imfset s).
+  rewrite -[s @: _]renamefsE fsetD_eqvar renamefsE -names_rename.
+  move: {xx} (unbind _ _)=> x; rewrite bound_rename_morph {1}/s fperm2L eq_l.
+  by move=> n'_in e; rewrite -bound_names_morph -e bound_names_morph.
 Qed.
 
-Lemma bound_namesTeq n n' xx :
-  n \in bound_names xx ->
-  bound_rename (fperm2 n n') xx = xx ->
-  n' \in bound_names xx.
-Proof.
-rewrite -[xx](unbindK fset0) bound_names_morph; set s := fperm2 n n'.
-move/(mem_imfset s).
-rewrite -[s @: _]renamefsE fsetD_eqvar renamefsE -names_rename.
-move: {xx} (unbind _ _)=> x; rewrite bound_rename_morph {1}/s fperm2L eq_l.
-by move=> n'_in e; rewrite -bound_names_morph -e bound_names_morph.
-Qed.
-
-Lemma bound_namesNNE n n' xx :
-  n \notin bound_names xx ->
-  n' \notin bound_names xx ->
-  bound_rename (fperm2 n n') xx = xx.
-Proof.
-rewrite -[xx](unbindK fset0) bound_names_morph; move: (unbind _ _)=> {xx} x.
-rewrite bound_rename_morph=> n_nin n'_nin; apply/esym/bind_eqP; eexists=> //.
-apply: (fdisjoint_trans (fsubset_supp_fperm2 n n')).
-by rewrite fdisjointC !fdisjointUr !fdisjoints1 n'_nin n_nin fdisjoints0.
-Qed.
-
-Definition bound_nominalMixin :=
-  NominalMixin (Nominal.Axioms bound_renameD bound_namesNNE bound_namesTeq).
+Definition bound_nominalMixin := NominalMixin bound_renameP.
 Canonical bound_nominalType :=
   Eval hnf in NominalType bound_type bound_nominalMixin.
 
@@ -1846,7 +1758,7 @@ have dis': fdisjoint (D :|: names (rename s1 x)) (lS (rename s1 y)).
   by rewrite -fdisjoint_eqvar fdisjointUl dis_y fdisjointC.
 case: (ubindP dis') => /= s2 dis_s2; rewrite fdisjointUr.
 case/andP=> dis_s2D dis_s2_x.
-rewrite -(renameJ dis_s2_x) !renameD.
+rewrite -(renameJ dis_s2_x) !renameA.
 apply: UBind2Spec.
 - apply: (fdisjoint_trans (supp_mul _ _)).
   rewrite fdisjointUl dis_s1 andbT; rewrite -[_ :\: _]namesfsnE in dis_s1.
