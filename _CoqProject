@@ -4,5 +4,6 @@
 theories/void.v
 theories/hseq.v
 theories/word.v
+theories/generic.v
 theories/nominal.v
 theories/string.v
