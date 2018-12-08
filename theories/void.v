@@ -1,5 +1,7 @@
 From mathcomp Require Import ssreflect ssrfun eqtype choice fintype.
 
+From extructures Require Import ord.
+
 Notation void := Empty_set.
 
 Definition of_void T (x : void) : T := match x with end.
@@ -16,3 +18,5 @@ Definition void_countMixin := PcanCountMixin (of_voidK unit).
 Canonical void_countType := Eval hnf in CountType void void_countMixin.
 Definition void_finMixin := PcanFinMixin (of_voidK unit).
 Canonical void_finType := Eval hnf in FinType void void_finMixin.
+Definition void_ordMixin := PcanOrdMixin (of_voidK unit).
+Canonical void_ordType := Eval hnf in OrdType void void_ordMixin.
