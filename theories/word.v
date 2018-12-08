@@ -2,7 +2,9 @@ From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype div ssralg finalg
   zmodp bigop tuple finfun binomial ssrint intdiv ssrnum.
 
-Require Import hseq ord nominal.
+From extructures Require Import ord.
+
+Require Import hseq nominal.
 
 Set Implicit Arguments.
 Unset Strict Implicit.

@@ -3,7 +3,9 @@ From mathcomp Require Import
 
 Require Import Coq.Strings.Ascii Coq.Strings.String.
 
-Require Import ord nominal.
+From extructures Require Import ord.
+
+Require Import nominal.
 
 Notation string := string.
 

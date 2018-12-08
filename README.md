@@ -2,11 +2,6 @@
 
 This package contains miscellaneous useful Coq libraries:
 
-- `ord`: class of types with a total order relation.
-
-- `fset`, `fmap`, `fperm`: theories of finite sets, finite maps, and finite
-  permutations over a totally ordered type supporting extensional equality.
-
 - `nominal`: a simple theory of [nominal sets][1] with computable support,
   including the formalization of name restriction and [binding operators][2].
 
@@ -25,16 +20,13 @@ with structure).
 
 ## Installation
 
-The package currently needs to be compiled by hand.  It requires:
+The package currently needs to be compiled by hand.  It requires Coq v8.6 -
+v8.8, as well as the following [OPAM][5] packages:
 
-- Coq v8.6
-- Some [Mathematical Components libraries][4], at least version 1.6:
-
-  * `coq-mathcomp-ssreflect`
-  * `coq-mathcomp-fingroup`
-  * `coq-mathcomp-algebra`
-
-  All of those can be installed using [OPAM][5].
+- `coq-mathcomp-ssreflect`, >= v1.6
+- `coq-mathcomp-fingroup`, >= v1.6
+- `coq-mathcomp-algebra`, >= v1.6
+- `coq-extructures`, >= v0.1
 
 To compile the package, simply run
 
@@ -51,7 +43,7 @@ Documentation for the libraries is currently scarce, but will be progressively
 added as comments in the headers of the files.  Once the package is installed,
 it can be required using the `CoqUtils` qualifier.  For example:
 
-    From CoqUtils Require Import ord fset.
+    From CoqUtils Require Import hseq nominal.
 
 
   [1]: https://link.springer.com/article/10.1007/s001650200016
