@@ -1252,33 +1252,41 @@ Canonical incfun_predom := Eval hnf in QDom.PreDom inc_lubP.
 (* FIXME: Using a regular definition here makes it harder for Coq to figure out
    that the coercion into functions below is valid. *)
 
-(*CoInductive type := IncFun {
+Record type (p : phant (T -> S)) := IncFun {
   quot_of_incfun : {qdom inc_appr}
-}.*)
-Definition type := {qdom inc_appr}.
-Definition type_of of phant (T -> S) := type.
-Identity Coercion type_of_type : type_of >-> type.
+}.
 
 End Def.
 
 Module Exports.
 
-Notation "{ 'incfun' T }" := (IncFun.type_of (Phant T))
+Notation "{ 'incfun' T }" := (IncFun.type (Phant T))
   (at level 0, format "{ 'incfun'  T }") : type_scope.
 
 Section WithVar.
 
 Variables T S : domType.
 
-Canonical incfun_eqType := Eval hnf in [eqType of IncFun.type T S].
-Canonical incfun_choiceType := Eval hnf in [choiceType of IncFun.type T S].
-Canonical incfun_ordType := Eval hnf in [ordType of IncFun.type T S].
-Canonical incfun_domType := Eval hnf in [domType of IncFun.type T S].
-
-Canonical incfun_of_eqType := Eval hnf in [eqType of {incfun T -> S}].
-Canonical incfun_of_choiceType := Eval hnf in [choiceType of {incfun T -> S}].
-Canonical incfun_of_ordType := Eval hnf in [ordType of {incfun T -> S}].
-Canonical incfun_of_domType := Eval hnf in [domType of {incfun T -> S}].
+Canonical incfun_newType :=
+  Eval hnf in [newType for @IncFun.quot_of_incfun _ _ (Phant (T -> S))].
+Definition incfun_eqMixin :=
+  [eqMixin of {incfun T -> S} by <:].
+Canonical incfun_eqType :=
+  Eval hnf in EqType {incfun T -> S} incfun_eqMixin.
+Definition incfun_choiceMixin :=
+  [choiceMixin of {incfun T -> S} by <:].
+Canonical incfun_choiceType :=
+  Eval hnf in ChoiceType {incfun T -> S} incfun_choiceMixin.
+Definition incfun_ordMixin :=
+  [ordMixin of {incfun T -> S} by <:].
+Canonical incfun_ordType :=
+  Eval hnf in OrdType {incfun T -> S} incfun_ordMixin.
+Canonical incfun_subDomType :=
+  Eval hnf in SubDomType {incfun T -> S} (fun _ _ _ _ _ _ => erefl).
+Definition incfun_domMixin :=
+  [domMixin of {incfun T -> S} by <:].
+Canonical incfun_domType :=
+  Eval hnf in DomType {incfun T -> S} incfun_domMixin.
 
 End WithVar.
 
@@ -1288,12 +1296,10 @@ End IncFun.
 
 Export IncFun.Exports.
 
-Definition inc_app (T S : domType) (f : IncFun.type T S) x : option S :=
-  IncFun.inc_app (repr f) x.
+Definition inc_app (T S : domType) p (f : @IncFun.type T S p) x : option S :=
+  IncFun.inc_app (repr (IncFun.quot_of_incfun f)) x.
 
 Coercion inc_app : IncFun.type >-> Funclass.
-(* This seems to be needed here *)
-Identity Coercion incfun_of_incfun : IncFun.type_of >-> IncFun.type.
 
 Section IncFunDom.
 
