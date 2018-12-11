@@ -1025,7 +1025,7 @@ End LCSubDom.
 
 Coercion lcset_sub : lcset >-> Sortclass.
 
-Module IncFun.
+Module Cont.
 
 Section Def.
 
@@ -1068,46 +1068,46 @@ Qed.
 
 Implicit Types fi gi hi : {f | increasing f}.
 
-Definition inc_app fi x := obind (val fi) (retract (domm (val fi)) x).
+Definition app fi x := obind (val fi) (retract (domm (val fi)) x).
 
-Definition inc_appr fi gi :=
-  all (fun x => inc_app fi x ⊑ inc_app gi x)
+Definition cont_appr fi gi :=
+  all (fun x => app fi x ⊑ app gi x)
       (lub_closure (domm (val fi) :|: domm (val gi))).
 
-Lemma inc_apprP fi gi :
-  reflect (forall x, inc_app fi x ⊑ inc_app gi x) (inc_appr fi gi).
+Lemma cont_apprP fi gi :
+  reflect (forall x, app fi x ⊑ app gi x) (cont_appr fi gi).
 Proof.
-apply/(iffP allP)=> //; move=> efg x; rewrite /inc_app.
+apply/(iffP allP)=> //; move=> efg x; rewrite /app.
 rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
 rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
 case e: (retract (_ :|: _) x)=> [x'|] //=.
 exact: (efg _ (retract_lub_closure e)).
 Qed.
 
-Lemma inc_apprPn fi gi :
-  reflect (exists x, ~~ (inc_app fi x ⊑ inc_app gi x)) (~~ inc_appr fi gi).
+Lemma cont_apprPn fi gi :
+  reflect (exists x, ~~ (app fi x ⊑ app gi x)) (~~ cont_appr fi gi).
 Proof.
 apply/(iffP allPn); first by case; eauto.
-case=> x; rewrite /inc_app.
+case=> x; rewrite /app.
 rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
 rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
 case ex: (retract (domm (val fi) :|: domm (val gi)) x)=> [x'|] //=.
 move=> fg; exists x'=> //; exact: retract_lub_closure ex.
 Qed.
 
-Lemma inc_apprxx : reflexive inc_appr.
-Proof. by move=> fi; apply/inc_apprP=> x; rewrite apprxx. Qed.
+Lemma cont_apprxx : reflexive cont_appr.
+Proof. by move=> fi; apply/cont_apprP=> x; rewrite apprxx. Qed.
 
-Lemma inc_appr_trans : transitive inc_appr.
+Lemma cont_appr_trans : transitive cont_appr.
 Proof.
-move=> gi fi hi /inc_apprP fg /inc_apprP gh.
-apply/inc_apprP=> x; exact: appr_trans (fg x) (gh x).
+move=> gi fi hi /cont_apprP fg /cont_apprP gh.
+apply/cont_apprP=> x; exact: appr_trans (fg x) (gh x).
 Qed.
 
-Lemma inc_app_inc fi gi x1 x2 :
-  inc_appr fi gi -> x1 ⊑ x2 -> inc_app fi x1 ⊑ inc_app gi x2.
+Lemma app_inc fi gi x1 x2 :
+  cont_appr fi gi -> x1 ⊑ x2 -> app fi x1 ⊑ app gi x2.
 Proof.
-rewrite /inc_app => /inc_apprP figi x1x2.
+rewrite /app => /cont_apprP figi x1x2.
 apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
   move: (retract_mono (domm (val fi)) x1x2).
   case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
@@ -1118,63 +1118,63 @@ apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
 exact/figi.
 Qed.
 
-Definition inc_eq fi gi := inc_appr fi gi && inc_appr gi fi.
+Definition cont_eq fi gi := cont_appr fi gi && cont_appr gi fi.
 
-Lemma inc_eqP fi gi : reflect (inc_app fi =1 inc_app gi) (inc_eq fi gi).
+Lemma cont_eqP fi gi : reflect (app fi =1 app gi) (cont_eq fi gi).
 Proof.
 apply/(iffP andP).
-  case=> [/inc_apprP fg /inc_apprP gf] x; apply/anti_appr.
+  case=> [/cont_apprP fg /cont_apprP gf] x; apply/anti_appr.
   by rewrite fg gf.
-by move=> e; split; apply/inc_apprP=> x; rewrite e apprxx.
+by move=> e; split; apply/cont_apprP=> x; rewrite e apprxx.
 Qed.
 
-Lemma inc_eqxx : reflexive inc_eq.
-Proof. by move=> fi; rewrite /inc_eq inc_apprxx. Qed.
+Lemma cont_eqxx : reflexive cont_eq.
+Proof. by move=> fi; rewrite /cont_eq cont_apprxx. Qed.
 
-Lemma inc_eq_sym : symmetric inc_eq.
-Proof. by move=> fi gi; rewrite /inc_eq andbC. Qed.
+Lemma cont_eq_sym : symmetric cont_eq.
+Proof. by move=> fi gi; rewrite /cont_eq andbC. Qed.
 
-Lemma inc_eq_trans : transitive inc_eq.
+Lemma cont_eq_trans : transitive cont_eq.
 Proof.
 move=> gi fi hi /andP [fg gf] /andP [gh hg]; apply/andP; split.
-  exact: inc_appr_trans fg gh.
-exact: inc_appr_trans hg gf.
+  exact: cont_appr_trans fg gh.
+exact: cont_appr_trans hg gf.
 Qed.
 
-Definition inc_eq_equiv :=
-  Eval hnf in EquivRel inc_eq inc_eqxx inc_eq_sym inc_eq_trans.
+Definition cont_eq_equiv :=
+  Eval hnf in EquivRel cont_eq cont_eqxx cont_eq_sym cont_eq_trans.
 
-Notation pinc_lub fi gi :=
-  (mkfmapfp (fun x => odflt None (inc_app fi x ⊔ inc_app gi x))
+Notation pcont_lub fi gi :=
+  (mkfmapfp (fun x => odflt None (app fi x ⊔ app gi x))
             (lub_closure (domm (val fi) :|: domm (val gi)))).
 
-Definition inc_lub fi gi : option {f | increasing f} :=
-  if insub (pinc_lub fi gi) is Some hi then
-    if inc_appr fi hi && inc_appr gi hi then Some hi
+Definition cont_lub fi gi : option {f | increasing f} :=
+  if insub (pcont_lub fi gi) is Some hi then
+    if cont_appr fi hi && cont_appr gi hi then Some hi
     else None
   else None.
 
-Lemma inc_lubP : QDom.axioms inc_appr inc_lub.
+Lemma cont_lubP : QDom.axioms cont_appr cont_lub.
 Proof.
 split=> /=.
-- move=> fq; exact: inc_apprxx.
-- move=> gq fq hq; exact: inc_appr_trans.
-move=> fi gi hi; rewrite /inc_lub /=.
+- move=> fq; exact: cont_apprxx.
+- move=> gq fq hq; exact: cont_appr_trans.
+move=> fi gi hi; rewrite /cont_lub /=.
 set clos := lub_closure (domm (val fi) :|: domm (val gi)).
 set fg   := mkfmapfp _ clos.
 have e :
   forall hi, fsubset (domm (val hi)) (domm (val fi) :|: domm (val gi)) ->
-  forall x, inc_app hi x = obind (inc_app hi) (retract clos x).
+  forall x, app hi x = obind (app hi) (retract clos x).
   move=> hi' sub.
   move: (fsubset_trans sub (lub_closure_ext _)) => {sub} sub x.
-  by rewrite /inc_app -(retractS _ sub); case: (retract clos x).
+  by rewrite /app -(retractS _ sub); case: (retract clos x).
 have ret_clos : forall x x', retract clos x = Some x' -> x' \in clos.
   move=> x x' ex; move: (retract_lub_closure ex).
   by rewrite lub_closure_idem => ->.
 move: {e} (e _ (fsubsetUl _ _)) (e _ (fsubsetUr _ _))=> fE gE.
 have [/allP coh|/allPn [x x_in incoh]] :=
-  boolP (all (fun x => inc_app fi x ⊔ inc_app gi x) clos).
-  have {coh} coh : forall x, inc_app fi x ⊔ inc_app gi x.
+  boolP (all (fun x => app fi x ⊔ app gi x) clos).
+  have {coh} coh : forall x, app fi x ⊔ app gi x.
     move=> x; rewrite fE gE; case ex: (retract clos x) => [x'|] //=.
     apply: coh; rewrite /clos -lub_closure_idem.
     by apply: retract_lub_closure ex.
@@ -1182,22 +1182,22 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     apply/eq_fset=> x'; rewrite domm_mkfmapfp in_fset mem_filter andbC.
     have [in_clos|] //= := boolP (x' \in lub_closure _).
     move: (coh x').
-    case fi_x': (inc_app fi x')=> [y1|] //=;
-    case gi_x': (inc_app gi x')=> [y2|] //=.
+    case fi_x': (app fi x')=> [y1|] //=;
+    case gi_x': (app gi x')=> [y2|] //=.
       by rewrite /lub /=; case: lub.
-    move: fi_x'; rewrite /inc_app.
+    move: fi_x'; rewrite /app.
     case e_fi_x': (retract (domm (val fi)) x')=> [x''|] //=.
       move=> fi_x''; move: (retract_lub_closure e_fi_x').
       case/increasingP: (valP fi)=> /lub_closed_closure -> _.
       by rewrite mem_domm fi_x''.
-    move=> _ _; move: gi_x'; rewrite /inc_app.
+    move=> _ _; move: gi_x'; rewrite /app.
     case e_gi_x': (retract (domm (val gi)) x')=> [x''|] //=.
       move=> gi_x''; move: (retract_lub_closure e_gi_x').
       case/increasingP: (valP gi)=> /lub_closed_closure -> _.
       by rewrite mem_domm gi_x''.
     by move/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
   have fgE : forall x, obind fg (retract clos x)
-                       = odflt None (inc_app fi x ⊔ inc_app gi x).
+                       = odflt None (app fi x ⊔ app gi x).
     move=> x; rewrite fE gE; case ex: (retract clos x)=> [x'|] //=.
     by rewrite mkfmapfpE (ret_clos _ _ ex).
   have Pfg : increasing fg.
@@ -1205,124 +1205,124 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     move=> x1 x2 in1 in2 x1x2; move: (fgE x1) (fgE x2) (in2).
     rewrite -{3}domm_fg mem_domm ?retractK ?lub_closure_idem //= => -> ->.
     move: (coh x1) (coh x2).
-    case el1: (inc_app fi x1 ⊔ inc_app gi x1)=> [[l1|]|] //= _.
-    case el2: (inc_app fi x2 ⊔ inc_app gi x2)=> [[l2|]|] //= _.
-    move: (is_lub_lub (inc_app fi x1) (inc_app gi x1) (Some l2)).
+    case el1: (app fi x1 ⊔ app gi x1)=> [[l1|]|] //= _.
+    case el2: (app fi x2 ⊔ app gi x2)=> [[l2|]|] //= _.
+    move: (is_lub_lub (app fi x1) (app gi x1) (Some l2)).
     rewrite el1 => <- => _; apply/andP; split.
-      exact: (appr_trans (inc_app_inc (inc_apprxx fi) x1x2) (lub_apprL el2)).
-    exact: (appr_trans (inc_app_inc (inc_apprxx gi) x1x2) (lub_apprR el2)).
+      exact: (appr_trans (app_inc (cont_apprxx fi) x1x2) (lub_apprL el2)).
+    exact: (appr_trans (app_inc (cont_apprxx gi) x1x2) (lub_apprR el2)).
   rewrite (insubT increasing Pfg).
-  have {fgE} fgE : forall x, inc_app (Sub fg Pfg) x =
-                             odflt None (inc_app fi x ⊔ inc_app gi x).
-    by move=> x; rewrite {1}/inc_app /= domm_fg.
+  have {fgE} fgE : forall x, app (Sub fg Pfg) x =
+                             odflt None (app fi x ⊔ app gi x).
+    by move=> x; rewrite {1}/app /= domm_fg.
   move: (Sub fg Pfg : {f | increasing f}) fgE => /= {fg Pfg domm_fg} fgi fgiE.
-  have -> /= : inc_appr fi fgi && inc_appr gi fgi.
+  have -> /= : cont_appr fi fgi && cont_appr gi fgi.
     apply/andP; split.
-      apply/inc_apprP=> x; rewrite fgiE fE gE.
+      apply/cont_apprP=> x; rewrite fgiE fE gE.
       case ex: (retract clos x)=> [x'|] //=.
       move: (coh x').
       case ey: lub=> [y|] //= _.
       exact: (lub_apprL ey).
-    apply/inc_apprP=> x; rewrite fgiE fE gE.
+    apply/cont_apprP=> x; rewrite fgiE fE gE.
     case ex: (retract clos x)=> [x'|] //=.
     move: (coh x').
     case ey: lub=> [y|] //= _.
     exact: (lub_apprR ey).
-  apply/(sameP andP)/(iffP (inc_apprP _ _)).
+  apply/(sameP andP)/(iffP (cont_apprP _ _)).
     move=> fgi_hi; split; apply/allP=> x in_clos.
-      move: (is_lub_lub (inc_app fi x) (inc_app gi x) (inc_app hi x)).
+      move: (is_lub_lub (app fi x) (app gi x) (app hi x)).
       move: (fgi_hi x) (coh x); rewrite fgiE.
       by case: lub=> /= [y|] // -> _ /andP [].
-    move: (is_lub_lub (inc_app fi x) (inc_app gi x) (inc_app hi x)).
+    move: (is_lub_lub (app fi x) (app gi x) (app hi x)).
     move: (fgi_hi x) (coh x); rewrite fgiE.
     by case: lub=> /= [y|] // -> _ /andP [].
-  case=> /inc_apprP fi_hi /inc_apprP gi_hi x; rewrite fgiE; move: (coh x).
-  move: (is_lub_lub (inc_app fi x) (inc_app gi x) (inc_app hi x)).
+  case=> /cont_apprP fi_hi /cont_apprP gi_hi x; rewrite fgiE; move: (coh x).
+  move: (is_lub_lub (app fi x) (app gi x) (app hi x)).
   by rewrite fi_hi gi_hi /=; case: lub.
-have {incoh} incoh : forall hi', ~~ (inc_appr fi hi' && inc_appr gi hi').
-  move=> hi'; apply: contra incoh => /andP [/inc_apprP fiP /inc_apprP giP].
-  move: (is_lub_lub (inc_app fi x) (inc_app gi x) (inc_app hi' x)).
+have {incoh} incoh : forall hi', ~~ (cont_appr fi hi' && cont_appr gi hi').
+  move=> hi'; apply: contra incoh => /andP [/cont_apprP fiP /cont_apprP giP].
+  move: (is_lub_lub (app fi x) (app gi x) (app hi' x)).
   by rewrite fiP giP; case: lub.
 rewrite (negbTE (incoh hi)); case: insubP=> /= [fgi inc|] //.
 by rewrite (negbTE (incoh fgi)).
 Qed.
 
-Canonical incfun_predom := Eval hnf in QDom.PreDom inc_lubP.
+Canonical cont_predom := Eval hnf in QDom.PreDom cont_lubP.
 
 (* FIXME: Using a regular definition here makes it harder for Coq to figure out
    that the coercion into functions below is valid. *)
 
-Record type (p : phant (T -> S)) := IncFun {
-  quot_of_incfun : {qdom inc_appr}
+Record type (p : phant (T -> S)) := Cont {
+  quot_of_cont : {qdom cont_appr}
 }.
 
 End Def.
 
 Module Exports.
 
-Notation "{ 'incfun' T }" := (IncFun.type (Phant T))
-  (at level 0, format "{ 'incfun'  T }") : type_scope.
+Notation "{ 'cont' T }" := (Cont.type (Phant T))
+  (at level 0, format "{ 'cont'  T }") : type_scope.
 
 Section WithVar.
 
 Variables T S : domType.
 
-Canonical incfun_newType :=
-  Eval hnf in [newType for @IncFun.quot_of_incfun _ _ (Phant (T -> S))].
-Definition incfun_eqMixin :=
-  [eqMixin of {incfun T -> S} by <:].
-Canonical incfun_eqType :=
-  Eval hnf in EqType {incfun T -> S} incfun_eqMixin.
-Definition incfun_choiceMixin :=
-  [choiceMixin of {incfun T -> S} by <:].
-Canonical incfun_choiceType :=
-  Eval hnf in ChoiceType {incfun T -> S} incfun_choiceMixin.
-Definition incfun_ordMixin :=
-  [ordMixin of {incfun T -> S} by <:].
-Canonical incfun_ordType :=
-  Eval hnf in OrdType {incfun T -> S} incfun_ordMixin.
-Canonical incfun_subDomType :=
-  Eval hnf in SubDomType {incfun T -> S} (fun _ _ _ _ _ _ => erefl).
-Definition incfun_domMixin :=
-  [domMixin of {incfun T -> S} by <:].
-Canonical incfun_domType :=
-  Eval hnf in DomType {incfun T -> S} incfun_domMixin.
+Canonical cont_newType :=
+  Eval hnf in [newType for @Cont.quot_of_cont _ _ (Phant (T -> S))].
+Definition cont_eqMixin :=
+  [eqMixin of {cont T -> S} by <:].
+Canonical cont_eqType :=
+  Eval hnf in EqType {cont T -> S} cont_eqMixin.
+Definition cont_choiceMixin :=
+  [choiceMixin of {cont T -> S} by <:].
+Canonical cont_choiceType :=
+  Eval hnf in ChoiceType {cont T -> S} cont_choiceMixin.
+Definition cont_ordMixin :=
+  [ordMixin of {cont T -> S} by <:].
+Canonical cont_ordType :=
+  Eval hnf in OrdType {cont T -> S} cont_ordMixin.
+Canonical cont_subDomType :=
+  Eval hnf in SubDomType {cont T -> S} (fun _ _ _ _ _ _ => erefl).
+Definition cont_domMixin :=
+  [domMixin of {cont T -> S} by <:].
+Canonical cont_domType :=
+  Eval hnf in DomType {cont T -> S} cont_domMixin.
 
 End WithVar.
 
 End Exports.
 
-End IncFun.
+End Cont.
 
-Export IncFun.Exports.
+Export Cont.Exports.
 
-Definition inc_app (T S : domType) p (f : @IncFun.type T S p) x : option S :=
-  IncFun.inc_app (repr (IncFun.quot_of_incfun f)) x.
+Definition cont_app (T S : domType) p (f : @Cont.type T S p) x : option S :=
+  Cont.app (repr (Cont.quot_of_cont f)) x.
 
-Coercion inc_app : IncFun.type >-> Funclass.
+Coercion cont_app : Cont.type >-> Funclass.
 
-Section IncFunDom.
+Section ContDom.
 
 Local Open Scope quotient_scope.
 
 Variables T S : domType.
-Implicit Types f g : {incfun T -> S}.
+Implicit Types f g : {cont T -> S}.
 Implicit Types (x y : T).
 
-Lemma inc_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
-Proof. exact/IncFun.inc_apprP. Qed.
+Lemma cont_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
+Proof. exact/Cont.cont_apprP. Qed.
 
-Lemma inc_app_inc f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
-Proof. exact/IncFun.inc_app_inc. Qed.
+Lemma cont_app_inc f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
+Proof. exact/Cont.app_inc. Qed.
 
-Lemma eq_incfun f g : f =1 g <-> f = g.
+Lemma eq_cont f g : f =1 g <-> f = g.
 Proof.
 split; last by move=> ->.
-by move=> fg; apply/anti_appr/andP; split; apply/inc_apprP=> x;
+by move=> fg; apply/anti_appr/andP; split; apply/cont_apprP=> x;
 rewrite fg apprxx.
 Qed.
 
-End IncFunDom.
+End ContDom.
 
 Section MemoryDef.
 
