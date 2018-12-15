@@ -14,6 +14,7 @@ Unset Printing Implicit Defensive.
 Delimit Scope dom_scope with dom.
 
 Reserved Notation "x ⊑ y" (at level 50, no associativity).
+Reserved Notation "x ⋢ y" (at level 50, no associativity).
 Reserved Notation "x ⊑ y ⊑ z" (at level 50, y at next level, no associativity).
 Reserved Notation "x ⊔ y" (at level 40, left associativity).
 
@@ -88,6 +89,7 @@ Export Dom.Exports.
 Definition appr T := Dom.appr (Dom.class T).
 Definition lub T := Dom.lub (Dom.class T).
 Notation "x ⊑ y" := (appr x y) : dom_scope.
+Notation "x ⋢ y" := (~~ appr x y) : dom_scope.
 Notation "x ⊑ y ⊑ z" := (appr x y && appr y z) : dom_scope.
 Notation "x ⊔ y" := (lub x y) : dom_scope.
 
@@ -390,6 +392,26 @@ Definition pred_of_lcset (T : domType) (xs : lcset T) :=
 Canonical lcset_predType T := mkPredType (@pred_of_lcset T).
 Canonical lcset_of_predType (T : domType) := [predType of {lcset T}].
 
+Section Embeddings.
+
+Variables T S : domType.
+
+Implicit Types f g : T -> S.
+
+Definition monotone f :=
+  forall x y, x ⊑ y -> f x ⊑ f y.
+
+Definition isotone f :=
+  forall x y, (f x ⊑ f y) = (x ⊑ y).
+
+Lemma iso_mono f : isotone f -> monotone f.
+Proof. by move=> iso_f x y; rewrite iso_f. Qed.
+
+Lemma iso_inj f : isotone f -> injective f.
+Proof. by move=> fP x y e; apply/anti_appr; rewrite -2!fP e apprxx. Qed.
+
+End Embeddings.
+
 Module QDom.
 
 Record axioms T (qappr : rel T) (qlub : T -> T -> option T) := Ax {
@@ -684,6 +706,9 @@ Implicit Types (xs : {fset T}) (x y : T).
 Definition retract xs x :=
   lubn (fset [seq y <- xs | y ⊑ x]).
 
+Lemma retract0 x : retract fset0 x = None.
+Proof. by rewrite /retract -fset0E lubn0. Qed.
+
 CoInductive retract_spec xs x : option T -> Prop :=
 | RetractSome y
   of y \in lub_closure xs
@@ -770,9 +795,9 @@ case e1: (retract xs x)=> [x'|] //= e2; apply/anti_appr.
 by rewrite -{1}e1 retract_appr -e2 retract_appr.
 Qed.
 
-Lemma retract_mono xs x y : x ⊑ y -> retract xs x ⊑ retract xs y.
+Lemma retract_mono xs : monotone (retract xs).
 Proof.
-move=> xy; rewrite /retract.
+move=> x y xy; rewrite /retract.
 have sub : fsubset (fset [seq z <- xs | z ⊑ x]) (fset [seq z <- xs | z ⊑ y]).
   apply/fsubsetP=> z; rewrite !in_fset !mem_filter => /andP [zx ->].
   by rewrite (appr_trans zx xy).
@@ -859,7 +884,7 @@ rewrite in_fsetU negb_or !mem_domm.
 by case: (f x) (g x) => [?|] [?|].
 Qed.
 
-Lemma fapprPn f g : reflect (exists x, ~~ (f x ⊑ g x)) (~~ fappr f g).
+Lemma fapprPn f g : reflect (exists x, f x ⋢ g x) (~~ fappr f g).
 Proof.
 rewrite /fappr; apply/(iffP allPn); first by case; eauto.
 case=> x Px; exists x=> //; rewrite in_fsetU mem_domm.
