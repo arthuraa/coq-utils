@@ -18,6 +18,65 @@ Reserved Notation "x ⋢ y" (at level 50, no associativity).
 Reserved Notation "x ⊑ y ⊑ z" (at level 50, y at next level, no associativity).
 Reserved Notation "x ⊔ y" (at level 40, left associativity).
 
+Local Open Scope fset_scope.
+
+(* TODO: Port generic set and map lemmas to extructures *)
+
+Section Sets.
+
+Variables T S : ordType.
+
+Lemma imfset_fset (f : T -> S) s : f @: fset s = fset [seq f x | x <- s].
+Proof.
+apply/eq_fset=> x; rewrite in_fset.
+apply/(sameP (imfsetP _ _ _))/(iffP mapP).
+- by case=> {x} x xin ->; exists x; rewrite ?in_fset.
+- by case=> {x} x xin ->; exists x; rewrite -1?in_fset.
+Qed.
+
+End Sets.
+
+Section Maps.
+
+Implicit Types (T : ordType) (S : Type).
+
+Definition mapm2 T T' S S' f g (m : {fmap T -> S}) : {fmap T' -> S'} :=
+  mkfmap [seq (f p.1, g p.2) | p <- m].
+
+Lemma mapm2E T T' S S' (f : T -> T') (g : S -> S') m x :
+  injective f ->
+  mapm2 f g m (f x) = omap g (m x).
+Proof.
+rewrite /mapm2 => f_inj; rewrite mkfmapE /getm.
+case: m=> [/= m _]; elim: m=> [|[x' y] m IH] //=.
+by rewrite (inj_eq f_inj) [in RHS]fun_if IH.
+Qed.
+
+Lemma domm_map2 T T' S S' (f : T -> T') (g : S -> S') m :
+  domm (mapm2 f g m) = f @: domm m.
+Proof.
+apply/eq_fset=> x; rewrite /mapm2 domm_mkfmap /unzip1 -map_comp /comp /=.
+by rewrite /domm imfset_fset in_fset -map_comp.
+Qed.
+
+Lemma mapm2_comp T T' T'' S S' S'' f f' g g' :
+  injective f  ->
+  injective f' ->
+  mapm2 (f' \o f) (g' \o g) =1
+  @mapm2 T' T'' S' T'' f' g' \o @mapm2 T T' S S' f g.
+Proof.
+move=> f_inj f'_inj m; apply/eq_fmap=> x /=.
+have [|xnin] := boolP (x \in domm (mapm2 (f' \o f) (g' \o g) m)).
+- rewrite domm_map2; case/imfsetP=> {x} x xin ->.
+  rewrite mapm2E /=; last exact: inj_comp.
+  by rewrite !mapm2E //; case: (m x).
+- move: (xnin); rewrite (dommPn _ _ xnin).
+  rewrite !domm_map2 // imfset_comp -(domm_map2 f g) -(domm_map2 f' g').
+  by move/dommPn=> ->.
+Qed.
+
+End Maps.
+
 Module Dom.
 
 Section ClassDef.
@@ -94,7 +153,6 @@ Notation "x ⊑ y ⊑ z" := (appr x y && appr y z) : dom_scope.
 Notation "x ⊔ y" := (lub x y) : dom_scope.
 
 Local Open Scope dom_scope.
-Local Open Scope fset_scope.
 
 Section Theory.
 
@@ -936,6 +994,14 @@ move=> /fapprP fg; apply/fsubsetP=> x; rewrite 2!mem_domm.
 by move: (fg x); case: (f x) (g x)=> [y1|] //= [y2|] //=.
 Qed.
 
+Lemma flubE f g h :
+  f ⊔ g = Some h -> forall x, h x = odflt None (f x ⊔ g x).
+Proof.
+rewrite /lub /= /flub; case: ifP=> // _ [<-] {h} x.
+rewrite mkfmapfpE in_fsetU !mem_domm.
+by case: (f x) (g x)=> [y1|] [y2|].
+Qed.
+
 Lemma domm_lub f g h : f ⊔ g = Some h -> domm h = domm f :|: domm g.
 Proof.
 move=> fg; apply/eqP; rewrite eqEfsubset fsubUset !domm_appr ?andbT;
@@ -946,6 +1012,31 @@ by case/andP.
 Qed.
 
 End FMapDom.
+
+Section MapProperties.
+
+Variables (T T' T'' : ordType) (S S' S'' : domType).
+
+Lemma mapm2_mono (f : T -> T') (g : S -> S') :
+  injective f -> monotone g -> monotone (mapm2 f g).
+Proof.
+move=> f_inj g_mono m1 m2 /fapprP m1m2; apply/fapprP=> x'.
+have [|/dommPn -> //] := boolP (x' \in domm (mapm2 f g m1)).
+rewrite domm_map2; case/imfsetP=> {x'} x xin ->; rewrite !mapm2E //.
+by case/dommP: xin (m1m2 x)=> y1 ->; case: (m2 x)=> [y2|//] /= /g_mono.
+Qed.
+
+Lemma mapm2_iso (f : T -> T') (g : S -> S') :
+  injective f -> isotone g -> isotone (mapm2 f g).
+Proof.
+move=> f_inj g_iso m1 m2; apply/(sameP idP)/(iffP idP).
+  exact: mapm2_mono f_inj (iso_mono g_iso) _ _.
+move=> /fapprP m1m2; apply/fapprP=> x; move: (m1m2 (f x)).
+rewrite !mapm2E //; case: (m1 x) (m2 x)=> [y1|//] [y2|//] /=.
+by rewrite oapprE g_iso.
+Qed.
+
+End MapProperties.
 
 Module SubDom.
 
