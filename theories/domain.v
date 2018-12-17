@@ -20,7 +20,16 @@ Reserved Notation "x ⊔ y" (at level 40, left associativity).
 
 Local Open Scope fset_scope.
 
-(* TODO: Port generic set and map lemmas to extructures *)
+(* TODO:
+
+- Port generic set and map lemmas to extructures.
+
+- Change set variables from xs to X
+
+- Simplify the definition of continuous functions to use that of plain
+functions.
+
+*)
 
 Section Sets.
 
@@ -455,6 +464,7 @@ Section Embeddings.
 Variables T S : domType.
 
 Implicit Types f g : T -> S.
+Implicit Types X : {fset T}.
 
 Definition monotone f :=
   forall x y, x ⊑ y -> f x ⊑ f y.
@@ -462,11 +472,31 @@ Definition monotone f :=
 Definition isotone f :=
   forall x y, (f x ⊑ f y) = (x ⊑ y).
 
+Definition lub_preserving f :=
+  forall x y, f x ⊔ f y = omap f (x ⊔ y).
+
 Lemma iso_mono f : isotone f -> monotone f.
 Proof. by move=> iso_f x y; rewrite iso_f. Qed.
 
 Lemma iso_inj f : isotone f -> injective f.
 Proof. by move=> fP x y e; apply/anti_appr; rewrite -2!fP e apprxx. Qed.
+
+Lemma inj_iso f : injective f -> lub_preserving f -> isotone f.
+Proof.
+move=> f_inj f_emb x y; apply/(sameP idP)/(iffP idP).
+  by rewrite !appr_lubL f_emb=> /eqP ->.
+by rewrite !appr_lubL f_emb; case e: (x ⊔ y)=> [?|//] /eqP [/f_inj ->].
+Qed.
+
+Lemma lub_closed_imfset f X :
+  lub_preserving f ->
+  lub_closed (mem X) ->
+  lub_closed (mem (f @: X)).
+Proof.
+move=> f_emb closed _ _ /imfsetP [x xin ->] /imfsetP [y yin ->].
+rewrite f_emb; case exy: (_ ⊔ _)=> [xy|//] _ [<-].
+by rewrite mem_imfset //; apply: closed exy.
+Qed.
 
 End Embeddings.
 
@@ -1201,7 +1231,7 @@ exact: (efg _ (retract_lub_closure e)).
 Qed.
 
 Lemma cont_apprPn fi gi :
-  reflect (exists x, ~~ (app fi x ⊑ app gi x)) (~~ cont_appr fi gi).
+  reflect (exists x, app fi x ⋢ app gi x) (~~ cont_appr fi gi).
 Proof.
 apply/(iffP allPn); first by case; eauto.
 case=> x; rewrite /app.
@@ -1220,7 +1250,7 @@ move=> gi fi hi /cont_apprP fg /cont_apprP gh.
 apply/cont_apprP=> x; exact: appr_trans (fg x) (gh x).
 Qed.
 
-Lemma app_inc fi gi x1 x2 :
+Lemma app_mono fi gi x1 x2 :
   cont_appr fi gi -> x1 ⊑ x2 -> app fi x1 ⊑ app gi x2.
 Proof.
 rewrite /app => /cont_apprP figi x1x2.
@@ -1233,32 +1263,6 @@ apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
   exact: (inc x1' x2' (retract_lub_closure e1) (retract_lub_closure e2) x1'x2').
 exact/figi.
 Qed.
-
-Definition cont_eq fi gi := cont_appr fi gi && cont_appr gi fi.
-
-Lemma cont_eqP fi gi : reflect (app fi =1 app gi) (cont_eq fi gi).
-Proof.
-apply/(iffP andP).
-  case=> [/cont_apprP fg /cont_apprP gf] x; apply/anti_appr.
-  by rewrite fg gf.
-by move=> e; split; apply/cont_apprP=> x; rewrite e apprxx.
-Qed.
-
-Lemma cont_eqxx : reflexive cont_eq.
-Proof. by move=> fi; rewrite /cont_eq cont_apprxx. Qed.
-
-Lemma cont_eq_sym : symmetric cont_eq.
-Proof. by move=> fi gi; rewrite /cont_eq andbC. Qed.
-
-Lemma cont_eq_trans : transitive cont_eq.
-Proof.
-move=> gi fi hi /andP [fg gf] /andP [gh hg]; apply/andP; split.
-  exact: cont_appr_trans fg gh.
-exact: cont_appr_trans hg gf.
-Qed.
-
-Definition cont_eq_equiv :=
-  Eval hnf in EquivRel cont_eq cont_eqxx cont_eq_sym cont_eq_trans.
 
 Notation pcont_lub fi gi :=
   (mkfmapfp (fun x => odflt None (app fi x ⊔ app gi x))
@@ -1325,8 +1329,8 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     case el2: (app fi x2 ⊔ app gi x2)=> [[l2|]|] //= _.
     move: (is_lub_lub (app fi x1) (app gi x1) (Some l2)).
     rewrite el1 => <- => _; apply/andP; split.
-      exact: (appr_trans (app_inc (cont_apprxx fi) x1x2) (lub_apprL el2)).
-    exact: (appr_trans (app_inc (cont_apprxx gi) x1x2) (lub_apprR el2)).
+      exact: (appr_trans (app_mono (cont_apprxx fi) x1x2) (lub_apprL el2)).
+    exact: (appr_trans (app_mono (cont_apprxx gi) x1x2) (lub_apprR el2)).
   rewrite (insubT increasing Pfg).
   have {fgE} fgE : forall x, app (Sub fg Pfg) x =
                              odflt None (app fi x ⊔ app gi x).
@@ -1428,8 +1432,8 @@ Implicit Types (x y : T).
 Lemma cont_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
 Proof. exact/Cont.cont_apprP. Qed.
 
-Lemma cont_app_inc f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
-Proof. exact/Cont.app_inc. Qed.
+Lemma cont_app_mono f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
+Proof. exact/Cont.app_mono. Qed.
 
 Lemma eq_cont f g : f =1 g <-> f = g.
 Proof.
