@@ -488,6 +488,11 @@ move=> f_inj f_emb x y; apply/(sameP idP)/(iffP idP).
 by rewrite !appr_lubL f_emb; case e: (x ⊔ y)=> [?|//] /eqP [/f_inj ->].
 Qed.
 
+Lemma lub_preserving_mono f : lub_preserving f -> monotone f.
+Proof.
+by move=> f_emb x y; rewrite 2!appr_lubL f_emb => /eqP ->.
+Qed.
+
 Lemma lub_closed_imfset f X :
   lub_preserving f ->
   lub_closed (mem X) ->
@@ -1041,32 +1046,20 @@ apply/fsubsetP=> x; rewrite domm_mkfmapfp in_fset mem_filter.
 by case/andP.
 Qed.
 
+Lemma flub_None f g : f ⊔ g = None -> exists x, ~~ (f x ⊔ g x).
+Proof.
+rewrite {1}/lub /= /flub; case: ifPn=> // /nandP [] /fapprPn.
+- case=> x; rewrite mkfmapfpE in_fsetU !mem_domm=> e _; exists x.
+  case: (f x) (g x) e=> [x1|//] [x2|//] /=; last by rewrite apprxx.
+  rewrite /lub /=; apply: contra.
+  case e: (x1 ⊔ x2)=> [x12|//] /= _; exact: lub_apprL e.
+- case=> x; rewrite mkfmapfpE in_fsetU !mem_domm=> e _; exists x.
+  case: (f x) (g x) e=> [x1|//] [x2|//] /=; last by rewrite apprxx.
+  rewrite /lub /=; apply: contra.
+  case e: (x1 ⊔ x2)=> [x12|//] /= _; exact: lub_apprR e.
+Qed.
+
 End FMapDom.
-
-Section MapProperties.
-
-Variables (T T' T'' : ordType) (S S' S'' : domType).
-
-Lemma mapm2_mono (f : T -> T') (g : S -> S') :
-  injective f -> monotone g -> monotone (mapm2 f g).
-Proof.
-move=> f_inj g_mono m1 m2 /fapprP m1m2; apply/fapprP=> x'.
-have [|/dommPn -> //] := boolP (x' \in domm (mapm2 f g m1)).
-rewrite domm_map2; case/imfsetP=> {x'} x xin ->; rewrite !mapm2E //.
-by case/dommP: xin (m1m2 x)=> y1 ->; case: (m2 x)=> [y2|//] /= /g_mono.
-Qed.
-
-Lemma mapm2_iso (f : T -> T') (g : S -> S') :
-  injective f -> isotone g -> isotone (mapm2 f g).
-Proof.
-move=> f_inj g_iso m1 m2; apply/(sameP idP)/(iffP idP).
-  exact: mapm2_mono f_inj (iso_mono g_iso) _ _.
-move=> /fapprP m1m2; apply/fapprP=> x; move: (m1m2 (f x)).
-rewrite !mapm2E //; case: (m1 x) (m2 x)=> [y1|//] [y2|//] /=.
-by rewrite oapprE g_iso.
-Qed.
-
-End MapProperties.
 
 Section FMapMonotone.
 
@@ -1088,6 +1081,93 @@ apply/(iffP allP).
 Qed.
 
 End FMapMonotone.
+
+Section MapProperties.
+
+Variables (T T' T'' : ordType) (S S' S'' : domType).
+Implicit Types (f : {fmap T -> S}).
+Implicit Types (h : T -> T') (g : S -> S').
+
+Lemma mapm2_mono h g :
+  injective h -> monotone g -> monotone (mapm2 h g).
+Proof.
+move=> h_inj g_mono f1 f2 /fapprP f1f2; apply/fapprP=> x'.
+have [|/dommPn -> //] := boolP (x' \in domm (mapm2 h g f1)).
+rewrite domm_map2; case/imfsetP=> {x'} x xin ->; rewrite !mapm2E //.
+by case/dommP: xin (f1f2 x)=> y1 ->; case: (f2 x)=> [y2|//] /= /g_mono.
+Qed.
+
+Lemma mapm2_iso h g :
+  injective h -> isotone g -> isotone (mapm2 h g).
+Proof.
+move=> h_inj g_iso f1 f2; apply/(sameP idP)/(iffP idP).
+  exact: mapm2_mono h_inj (iso_mono g_iso) _ _.
+move=> /fapprP f1f2; apply/fapprP=> x; move: (f1f2 (h x)).
+rewrite !mapm2E //; case: (f1 x) (f2 x)=> [y1|//] [y2|//] /=.
+by rewrite oapprE g_iso.
+Qed.
+
+(* FIXME: This proof has to be easier *)
+Lemma mapm2_lub h g :
+  injective h -> lub_preserving g -> lub_preserving (mapm2 h g).
+Proof.
+move=> h_inj g_lub f1 f2; apply/esym/lub_unique.
+move=> f3; apply/(sameP andP)/(iffP idP).
+- case ef12: (f1 ⊔ f2)=> [f12|//] /=.
+  move=> /fapprP f12P.
+  suffices H: forall x, (mapm2 h g f1 x ⊑ f3 x) && (mapm2 h g f2 x ⊑ f3 x).
+    by split; apply/fapprP=> x; case/andP: (H x).
+  move=> x; rewrite is_lub_lub.
+  have [|] := boolP (x \in h @: domm f12); last first.
+    rewrite (domm_lub ef12) imfsetU in_fsetU negb_or.
+    rewrite -2!(domm_map2 h g) !mem_domm.
+    by case: (mapm2 h g f1 x) (mapm2 h g f2 x)=> [?|] [?|].
+  case/imfsetP=> {x} x xin ->; move: (f12P (h x)); rewrite !mapm2E //.
+  move: xin; rewrite mem_domm (flubE ef12).
+  case: (f1 x) (f2 x)=> [x1|] [x2|] //=.
+  by rewrite ![Some _ ⊔ _]/lub /= g_lub; case: (x1 ⊔ x2)=> //=.
+- move/andP; rewrite is_lub_lub.
+  case ef12': (mapm2 _ _ _ ⊔ mapm2 _ _ _)=> [f12'|//] f12f3.
+  case ef12: (f1 ⊔ f2)=> [f12|] /=.
+  + apply/fapprP=> x.
+    have [|] := boolP (x \in h @: domm f12); last first.
+      by rewrite -(domm_map2 h g) mem_domm; case: (mapm2 _ _ _ x).
+    case/imfsetP=> {x} x xin ->.
+    rewrite mapm2E // (flubE ef12).
+    move/fapprP: f12f3=> /(_ (h x)); apply: appr_trans.
+    rewrite (flubE ef12') !mapm2E //.
+    move: xin; rewrite mem_domm (flubE ef12).
+    case: (f1 x) (f2 x)=> [x1|] [x2|] //=; try by rewrite apprxx.
+    by rewrite /lub /= g_lub; case: (_ ⊔ _)=> //= ?; rewrite apprxx.
+  + case/flub_None: ef12=> x.
+    case ex1: (f1 x)=> [x1|//]; case ex2: (f2 x)=> [x2|//].
+    rewrite /lub /=; case ex12: (x1 ⊔ x2)=> [//|] _.
+    suffices: f12' (h x).
+      by rewrite (flubE ef12') !mapm2E // ex1 ex2 /= /lub /= g_lub ex12.
+    rewrite -mem_domm (domm_lub ef12') in_fsetU !mem_domm !mapm2E //.
+    by rewrite ex1.
+Qed.
+
+End MapProperties.
+
+Section MapMonotone.
+
+Variables T T' S S' : domType.
+Implicit Types (f : T -> T') (g : S -> S').
+Implicit Types (h : {fmap T -> S}).
+
+Lemma mapm2_mono2 f g h :
+  isotone f -> monotone g -> monotoneb h ->
+  monotoneb (mapm2 f g h).
+Proof.
+move=> f_iso g_mono /monotonebP h_mono; apply/monotonebP.
+rewrite domm_map2=> _ _ /imfsetP [x xin ->] /imfsetP [y yin ->].
+rewrite f_iso ?mapm2E; try exact: iso_inj.
+move=> /(h_mono _ _ xin yin).
+by case/dommP: xin=> x' ->; case/dommP: yin=> y' -> /g_mono.
+Qed.
+
+End MapMonotone.
 
 Module SubDom.
 
