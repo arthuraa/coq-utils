@@ -1068,6 +1068,27 @@ Qed.
 
 End MapProperties.
 
+Section FMapMonotone.
+
+Variables T S : domType.
+Implicit Types (f : {fmap T -> S}) (x y : T).
+
+Definition monotoneb f :=
+  all (fun '(x, y) => x ⊑ y ==> f x ⊑ f y)
+      [seq (x, y) | x <- domm f, y <- domm f].
+
+Lemma monotonebP f :
+  reflect {in domm f &, monotone f} (monotoneb f).
+Proof.
+apply/(iffP allP).
+- move=> fP x y xin yin; apply/implyP; move/(_ (x, y)): fP; apply.
+  by apply/allpairsP; exists (x, y); split.
+- move=> fP /= [_ _] /allpairsP [[x y] [/= xin yin [-> ->]]].
+  by apply/implyP; apply: fP.
+Qed.
+
+End FMapMonotone.
+
 Module SubDom.
 
 Section ClassDef.
@@ -1180,39 +1201,10 @@ Implicit Types (f g : {fmap T -> S}) (x : T).
 
 Local Open Scope quotient_scope.
 
-Definition increasing f :=
-  all (fun p => p.1 ⊑ p.2 ==> f p.1 ⊑ f p.2)
-      [seq (x1, x2) | x1 <- lub_closure (domm f),
-                      x2 <- lub_closure (domm f) ].
+Local Notation F :=
+  {f : {fmap T -> S} | (lub_closure (domm f) == domm f) && monotoneb f}.
 
-Lemma increasingP f :
-  reflect (lub_closed (mem (domm f))
-           /\ {in domm f &, forall x1 x2, x1 ⊑ x2 -> f x1 ⊑ f x2})
-          (increasing f).
-Proof.
-apply/(iffP allP)=> /= [inc | [clos inc]].
-  have/fsubsetP ext := lub_closure_ext (domm f).
-  have clos : lub_closed (mem (domm f)); last split=> //.
-    move=> x1 x2 /dommP [y1 e1] /dommP [y2 e2] x12 e12.
-    have/inc/implyP/(_ (lub_apprL e12)):
-      (x1, x12) \in [seq (x1, x12) | x1  <- lub_closure (domm f),
-                                     x12 <- lub_closure (domm f)].
-      apply/allpairsP; exists (x1, x12)=> /=; split=> //=.
-        by apply/ext; rewrite mem_domm e1.
-      apply/(lub_closure_closed _ _ e12); apply/ext;
-      by rewrite mem_domm (e1, e2).
-    rewrite e1 /= mem_domm; by case: (f x12).
-  move=> x1 x2 in1 in2 x1x2.
-  suff/inc/implyP/(_ x1x2):
-    (x1, x2) \in [seq (x1, x2) | x1 <- lub_closure (domm f),
-                                 x2 <- lub_closure (domm f) ] by [].
-  by apply/allpairsP; exists (x1, x2); split=> //=; eauto.
-rewrite (lub_closed_closure clos).
-case=> [? ?] /allpairsP [[x1 x2] [in1 in2 [-> ->]]].
-by apply/implyP/inc.
-Qed.
-
-Implicit Types fi gi hi : {f | increasing f}.
+Implicit Types fi gi hi : F.
 
 Definition app fi x := obind (val fi) (retract (domm (val fi)) x).
 
@@ -1259,8 +1251,9 @@ apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
   case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
   case e2: (retract (domm (val fi)) x2)=> [x2'|] //=.
   rewrite oapprE=> x1'x2'.
-  move/increasingP: (valP fi) => [/lub_closed_closure <- inc].
-  exact: (inc x1' x2' (retract_lub_closure e1) (retract_lub_closure e2) x1'x2').
+  case/andP: (valP fi) => /eqP closed /monotonebP mono.
+  rewrite -closed in mono.
+  exact: mono (retract_lub_closure e1) (retract_lub_closure e2) x1'x2'.
 exact/figi.
 Qed.
 
@@ -1268,7 +1261,7 @@ Notation pcont_lub fi gi :=
   (mkfmapfp (fun x => odflt None (app fi x ⊔ app gi x))
             (lub_closure (domm (val fi) :|: domm (val gi)))).
 
-Definition cont_lub fi gi : option {f | increasing f} :=
+Definition cont_lub fi gi : option F :=
   if insub (pcont_lub fi gi) is Some hi then
     if cont_appr fi hi && cont_appr gi hi then Some hi
     else None
@@ -1308,22 +1301,23 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     move: fi_x'; rewrite /app.
     case e_fi_x': (retract (domm (val fi)) x')=> [x''|] //=.
       move=> fi_x''; move: (retract_lub_closure e_fi_x').
-      case/increasingP: (valP fi)=> /lub_closed_closure -> _.
+      case/andP: (valP fi)=> /eqP -> _.
       by rewrite mem_domm fi_x''.
     move=> _ _; move: gi_x'; rewrite /app.
     case e_gi_x': (retract (domm (val gi)) x')=> [x''|] //=.
       move=> gi_x''; move: (retract_lub_closure e_gi_x').
-      case/increasingP: (valP gi)=> /lub_closed_closure -> _.
+      case/andP: (valP gi)=> /eqP ->.
       by rewrite mem_domm gi_x''.
     by move/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
   have fgE : forall x, obind fg (retract clos x)
                        = odflt None (app fi x ⊔ app gi x).
     move=> x; rewrite fE gE; case ex: (retract clos x)=> [x'|] //=.
     by rewrite mkfmapfpE (ret_clos _ _ ex).
-  have Pfg : increasing fg.
-    apply/increasingP; split; rewrite domm_fg; first exact/lub_closure_closed.
-    move=> x1 x2 in1 in2 x1x2; move: (fgE x1) (fgE x2) (in2).
-    rewrite -{3}domm_fg mem_domm ?retractK ?lub_closure_idem //= => -> ->.
+  have Pfg : (lub_closure (domm fg) == domm fg) && monotoneb fg.
+    rewrite domm_fg /clos lub_closure_idem eqxx /=.
+    apply/monotonebP=> x1 x2 in1 in2 x1x2; move: (fgE x1) (fgE x2) (in2).
+    rewrite {1 2}domm_fg in in1 in2.
+    rewrite mem_domm ?retractK ?lub_closure_idem //= => -> ->.
     move: (coh x1) (coh x2).
     case el1: (app fi x1 ⊔ app gi x1)=> [[l1|]|] //= _.
     case el2: (app fi x2 ⊔ app gi x2)=> [[l2|]|] //= _.
@@ -1331,11 +1325,11 @@ have [/allP coh|/allPn [x x_in incoh]] :=
     rewrite el1 => <- => _; apply/andP; split.
       exact: (appr_trans (app_mono (cont_apprxx fi) x1x2) (lub_apprL el2)).
     exact: (appr_trans (app_mono (cont_apprxx gi) x1x2) (lub_apprR el2)).
-  rewrite (insubT increasing Pfg).
+  rewrite insubT.
   have {fgE} fgE : forall x, app (Sub fg Pfg) x =
                              odflt None (app fi x ⊔ app gi x).
     by move=> x; rewrite {1}/app /= domm_fg.
-  move: (Sub fg Pfg : {f | increasing f}) fgE => /= {fg Pfg domm_fg} fgi fgiE.
+  move: (Sub fg Pfg) fgE => /= {fg Pfg domm_fg} fgi fgiE.
   have -> /= : cont_appr fi fgi && cont_appr gi fgi.
     apply/andP; split.
       apply/cont_apprP=> x; rewrite fgiE fE gE.
