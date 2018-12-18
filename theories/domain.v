@@ -1583,7 +1583,7 @@ Section ContDom.
 Local Open Scope quotient_scope.
 
 Variables T S : domType.
-Implicit Types f g : {cont T -> S}.
+Implicit Types f g fg : {cont T -> S}.
 Implicit Types (x y : T).
 
 Definition fmap_of_cont f : {fmap T -> S} :=
@@ -1592,6 +1592,17 @@ Definition fmap_of_cont f : {fmap T -> S} :=
 Definition Cont (h : {fmap T -> S}) : {cont T -> S} :=
   if insub h is Some hi then Cont.Cont _ (\pi hi)
   else Cont.Cont (Phant (T -> S)) (\pi (Sub emptym (Cont.saturated0 _ _))).
+
+Lemma cont_appE f x :
+  f x = obind (fmap_of_cont f) (retract (domm (fmap_of_cont f)) x).
+Proof. by []. Qed.
+
+Lemma cont_appEin f x :
+  x \in domm (fmap_of_cont f) -> f x = fmap_of_cont f x.
+Proof.
+move=> xin; rewrite cont_appE retractK //.
+move: x xin; exact/fsubsetP/lub_closure_ext.
+Qed.
 
 Lemma fmap_of_contK : cancel fmap_of_cont Cont.
 Proof.
@@ -1642,6 +1653,8 @@ Qed.
 
 End ContDom.
 
+Arguments cont_apprP {_ _} [_ _].
+
 Section ContMapping.
 
 Variables T1 T2 S1 S2 : domType.
@@ -1651,21 +1664,53 @@ Implicit Types (x : T1).
 Definition mapc f g h : {cont T2 -> S2} :=
   Cont (mapm2 f g (fmap_of_cont h)).
 
+Lemma mapm2_saturated f g (h : {fmap T1 -> S1}) :
+  injective f -> lub_preserving f -> monotone g ->
+  Cont.saturated h -> Cont.saturated (mapm2 f g h).
+Proof.
+move=> f_inj f_lub g_mono /andP [h_lub h_mono].
+rewrite /Cont.saturated domm_map2 mapm2_mono2 //; last exact: inj_iso.
+by rewrite lub_closure_imfset // (eqP h_lub) eqxx.
+Qed.
+
 Lemma mapcE f g h x :
-  injective f ->
-  lub_preserving f ->
-  monotone g ->
+  injective f -> lub_preserving f -> monotone g ->
   mapc f g h (f x) = omap g (h x).
 Proof.
 move=> f_inj f_lub g_mono; rewrite /mapc.
 rewrite -[h in RHS]fmap_of_contK [in RHS]ContE; last exact: fmap_of_contP.
 move: (fmap_of_cont h) (fmap_of_contP h)=> {h} h hP.
-rewrite ContE; last first.
-  case/andP: hP=> h_lub h_mono.
-  rewrite /Cont.saturated domm_map2 mapm2_mono2 //; last exact: inj_iso.
-  by rewrite lub_closure_imfset // (eqP h_lub) eqxx.
+rewrite ContE; last exact: mapm2_saturated.
 rewrite domm_map2 retract_imfset //.
 case: (retract (domm h) x)=> {x} [x|] //=; by rewrite mapm2E.
+Qed.
+
+Lemma mapc_mono f g :
+  injective f -> lub_preserving f -> monotone g ->
+  monotone (mapc f g).
+Proof.
+move=> f_inj f_lub g_mono h1 h2 h1h2; apply/cont_apprP=> x2.
+rewrite {1}/mapc ContE; try exact: mapm2_saturated (fmap_of_contP _).
+rewrite domm_map2; case ex2': (retract _ _)=> [x2'|//] /=.
+move: (retract_lub_closure ex2'); rewrite lub_closure_imfset //.
+case/andP: (fmap_of_contP h1)=> /eqP -> _ x2'in.
+case/imfsetP: x2'in ex2'=> {x2'} x1 x1in -> ex2'.
+move/cont_apprP/(_ x1): h1h2; rewrite mapm2E -?cont_appEin //.
+case: (h1 x1)=> [y1|//] /=.
+rewrite cont_appE; case ex1': (retract _ _)=> [x1'|//] /=.
+have efx1': retract (f @: domm (fmap_of_cont h2)) (f x1) = Some (f x1').
+  by rewrite retract_imfset // ex1'.
+have fx1_x2: f x1 ⊑ x2.
+  by move: (retract_appr (f @: domm (fmap_of_cont h1)) x2); rewrite ex2'.
+move: (retract_mono (f @: (domm (fmap_of_cont h2))) fx1_x2); rewrite efx1'.
+case: (retract _ _) (retract_appr (f @: domm (fmap_of_cont h2)) x2)=> // x2'.
+move=> x2'_x2 fx1'_x2' y1_x1'.
+have: mapc f g h2 (f x1') ⊑ mapc f g h2 x2.
+  rewrite cont_app_mono ?apprxx //.
+  exact: appr_trans fx1'_x2' x2'_x2.
+apply: appr_trans; rewrite mapcE // cont_appE retractK /=; last first.
+  apply: retract_lub_closure ex1'.
+case: (fmap_of_cont h2 x1') y1_x1'=> [y2|//] /=; exact: g_mono.
 Qed.
 
 End ContMapping.
