@@ -33,8 +33,6 @@ functions.
 
 - Define a quotient instance for cont.
 
-- Find a better name for lcset
-
 - Have a separate upper-bound predicate
 
 *)
@@ -441,40 +439,40 @@ apply/lub_closed_closure=> x1 x2; rewrite !in_fset1.
 by move=> /eqP -> /eqP ->; rewrite lubxx => _ [<-]; rewrite in_fset1.
 Qed.
 
-Record lcset := LCSet {
-  lcval :> {fset T};
-  _     :  lub_closure lcval == lcval
+Record proj := Proj {
+  proj_val :> {fset T};
+  _        :  lub_closure proj_val == proj_val
 }.
-Definition lcset_of of phant T := lcset.
-Identity Coercion lcset_of_lcset : lcset_of >-> lcset.
+Definition proj_of of phant T := proj.
+Identity Coercion proj_of_proj : proj_of >-> proj.
 
-Canonical lcset_subType := [subType for lcval].
-Definition lcset_eqMixin := [eqMixin of lcset by <:].
-Canonical lcset_eqType := Eval hnf in EqType lcset lcset_eqMixin.
-Definition lcset_choiceMixin := [choiceMixin of lcset by <:].
-Canonical lcset_choiceType := Eval hnf in ChoiceType lcset lcset_choiceMixin.
-Definition lcset_ordMixin := [ordMixin of lcset by <:].
-Canonical lcset_ordType := Eval hnf in OrdType lcset lcset_ordMixin.
+Canonical proj_subType := [subType for proj_val].
+Definition proj_eqMixin := [eqMixin of proj by <:].
+Canonical proj_eqType := Eval hnf in EqType proj proj_eqMixin.
+Definition proj_choiceMixin := [choiceMixin of proj by <:].
+Canonical proj_choiceType := Eval hnf in ChoiceType proj proj_choiceMixin.
+Definition proj_ordMixin := [ordMixin of proj by <:].
+Canonical proj_ordType := Eval hnf in OrdType proj proj_ordMixin.
 
-Canonical lcset_of_subType := [subType of lcset_of (Phant T)].
-Canonical lcset_of_eqType := [eqType of lcset_of (Phant T)].
-Canonical lcset_of_choiceType := [choiceType of lcset_of (Phant T)].
-Canonical lcset_of_ordType := [ordType of lcset_of (Phant T)].
+Canonical proj_of_subType := [subType of proj_of (Phant T)].
+Canonical proj_of_eqType := [eqType of proj_of (Phant T)].
+Canonical proj_of_choiceType := [choiceType of proj_of (Phant T)].
+Canonical proj_of_ordType := [ordType of proj_of (Phant T)].
 
-Program Definition lcset0 := @LCSet fset0 _.
+Program Definition proj0 := @Proj fset0 _.
 Next Obligation. by rewrite lub_closure0. Qed.
-Program Definition lcset1 x := @LCSet (fset1 x) _.
+Program Definition proj1 x := @Proj (fset1 x) _.
 Next Obligation. by rewrite lub_closure1. Qed.
 
 End Theory.
 
-Notation "{ 'lcset' T }" := (lcset_of (Phant T))
-  (at level 0, format "{ 'lcset'  T }") : type_scope.
+Notation "{ 'proj' T }" := (proj_of (Phant T))
+  (at level 0, format "{ 'proj'  T }") : type_scope.
 
-Definition pred_of_lcset (T : domType) (xs : lcset T) :=
+Definition pred_of_proj (T : domType) (xs : proj T) :=
   [pred x : T | x \in val xs].
-Canonical lcset_predType T := mkPredType (@pred_of_lcset T).
-Canonical lcset_of_predType (T : domType) := [predType of {lcset T}].
+Canonical proj_predType T := mkPredType (@pred_of_proj T).
+Canonical proj_of_predType (T : domType) := [predType of {proj T}].
 
 Section Embeddings.
 
@@ -1312,35 +1310,35 @@ End SubDomTheory.
 
 Section LCSubDom.
 
-Variables (T : domType) (xs : lcset T).
+Variables (T : domType) (xs : proj T).
 
-Structure lcset_sub := LCSetSub {
-  lcsetval :> T;
-  _        :  lcsetval \in xs
+Structure proj_sub := ProjSub {
+  proj_elt :> T;
+  _        :  proj_elt \in xs
 }.
 
-Canonical lcset_sub_subType := [subType for lcsetval].
-Definition lcset_sub_eqMixin := [eqMixin of lcset_sub by <:].
-Canonical lcset_sub_eqType := Eval hnf in EqType lcset_sub lcset_sub_eqMixin.
-Definition lcset_sub_choiceMixin := [choiceMixin of lcset_sub by <:].
-Canonical lcset_sub_choiceType :=
-  Eval hnf in ChoiceType lcset_sub lcset_sub_choiceMixin.
-Definition lcset_sub_ordMixin := [ordMixin of lcset_sub by <:].
-Canonical lcset_sub_ordType :=
-  Eval hnf in OrdType lcset_sub lcset_sub_ordMixin.
+Canonical proj_sub_subType := [subType for proj_elt].
+Definition proj_sub_eqMixin := [eqMixin of proj_sub by <:].
+Canonical proj_sub_eqType := Eval hnf in EqType proj_sub proj_sub_eqMixin.
+Definition proj_sub_choiceMixin := [choiceMixin of proj_sub by <:].
+Canonical proj_sub_choiceType :=
+  Eval hnf in ChoiceType proj_sub proj_sub_choiceMixin.
+Definition proj_sub_ordMixin := [ordMixin of proj_sub by <:].
+Canonical proj_sub_ordType :=
+  Eval hnf in OrdType proj_sub proj_sub_ordMixin.
 
-Lemma lcset_subP : lub_closed (mem xs).
+Lemma proj_subP : lub_closed (mem xs).
 Proof. apply/lub_closedP/eqP; exact: (valP xs). Qed.
 
-Canonical lcset_sub_subDomType :=
-  Eval hnf in SubDomType lcset_sub lcset_subP.
-Definition lcset_sub_domMixin := [domMixin of lcset_sub by <:].
-Canonical lcset_sub_domType :=
-  Eval hnf in DomType lcset_sub lcset_sub_domMixin.
+Canonical proj_sub_subDomType :=
+  Eval hnf in SubDomType proj_sub proj_subP.
+Definition proj_sub_domMixin := [domMixin of proj_sub by <:].
+Canonical proj_sub_domType :=
+  Eval hnf in DomType proj_sub proj_sub_domMixin.
 
 End LCSubDom.
 
-Coercion lcset_sub : lcset >-> Sortclass.
+Coercion proj_sub : proj >-> Sortclass.
 
 Module Cont.
 
@@ -1981,8 +1979,8 @@ Qed.
 Canonical comp_emb T S U (e1 : {emb U -> S}) (e2 : {emb S -> T}) :=
   Embedding (comp_embP e1 e2).
 
-Lemma retr_embP T (sT : {lcset T}) :
-  emb_class_of (@lcsetval T sT) (pcomp insub (retract sT)).
+Lemma retr_embP T (sT : {proj T}) :
+  emb_class_of (@proj_elt T sT) (pcomp insub (retract sT)).
 Proof.
 split.
 - move=> /= x; rewrite /pcomp retractK /= ?valK //.
@@ -1992,7 +1990,7 @@ move=> /= x y; rewrite /pcomp; case: retractP => [z|]; move/eqP: (valP sT) => ->
   by rewrite insubT.
 move=> -> //; exact: (valP x).
 Qed.
-Canonical retr_emb T (sT : {lcset T}) := Embedding (retr_embP sT).
+Canonical retr_emb T (sT : {proj T}) := Embedding (retr_embP sT).
 
 Lemma of_void_embP T : emb_class_of (of_void T) (@to_void T).
 Proof. by split; case. Qed.
@@ -2019,7 +2017,7 @@ Record functor := Functor {
   f_comp :  forall (T S U : domType) (e1 : {emb S -> U}) (e2 : {emb T -> S}),
               f_mor (comp_emb e2 e1) =1 comp_emb (f_mor e2) (f_mor e1);
   f_cont :  forall (T : domType) (x : f_obj T),
-            exists (sT : {lcset T}) (x' : f_obj [domType of sT]),
+            exists (sT : {proj T}) (x' : f_obj [domType of sT]),
               x = f_mor (retr_emb sT) x'
 }.
 
@@ -2264,8 +2262,8 @@ have /lub_closedP/eqP sS_clos : lub_closed (mem sS).
   rewrite /= e_sT inE mem_imfset_inj //.
   exact/emb_inj.
 move: e_sT.
-have [{sS sS_clos} sS -> /= e_sT] : exists sS' : {lcset chain n}, sS = val sS'.
-  by exists (LCSet sS_clos).
+have [{sS sS_clos} sS -> /= e_sT] : exists sS' : {proj chain n}, sS = val sS'.
+  by exists (Proj sS_clos).
 have in_mu_sur : forall y : sT, exists y' : sS, (val y == in_mu y').
 - move=> [/= y]; rewrite inE /= e_sT; case/imfsetP=> y' in_sS ->.
   by exists (Sub y' in_sS).
