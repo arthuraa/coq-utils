@@ -1308,37 +1308,37 @@ Proof. by rewrite !appr_lubL lub_val; case: (_ ⊔ _). Qed.
 
 End SubDomTheory.
 
-Section LCSubDom.
+Section ProjDom.
 
 Variables (T : domType) (xs : proj T).
 
-Structure proj_sub := ProjSub {
+Structure proj_dom := ProjDom {
   proj_elt :> T;
   _        :  proj_elt \in xs
 }.
 
-Canonical proj_sub_subType := [subType for proj_elt].
-Definition proj_sub_eqMixin := [eqMixin of proj_sub by <:].
-Canonical proj_sub_eqType := Eval hnf in EqType proj_sub proj_sub_eqMixin.
-Definition proj_sub_choiceMixin := [choiceMixin of proj_sub by <:].
-Canonical proj_sub_choiceType :=
-  Eval hnf in ChoiceType proj_sub proj_sub_choiceMixin.
-Definition proj_sub_ordMixin := [ordMixin of proj_sub by <:].
-Canonical proj_sub_ordType :=
-  Eval hnf in OrdType proj_sub proj_sub_ordMixin.
+Canonical proj_dom_subType := [subType for proj_elt].
+Definition proj_dom_eqMixin := [eqMixin of proj_dom by <:].
+Canonical proj_dom_eqType := Eval hnf in EqType proj_dom proj_dom_eqMixin.
+Definition proj_dom_choiceMixin := [choiceMixin of proj_dom by <:].
+Canonical proj_dom_choiceType :=
+  Eval hnf in ChoiceType proj_dom proj_dom_choiceMixin.
+Definition proj_dom_ordMixin := [ordMixin of proj_dom by <:].
+Canonical proj_dom_ordType :=
+  Eval hnf in OrdType proj_dom proj_dom_ordMixin.
 
-Lemma proj_subP : lub_closed (mem xs).
+Lemma proj_domP : lub_closed (mem xs).
 Proof. apply/lub_closedP/eqP; exact: (valP xs). Qed.
 
-Canonical proj_sub_subDomType :=
-  Eval hnf in SubDomType proj_sub proj_subP.
-Definition proj_sub_domMixin := [domMixin of proj_sub by <:].
-Canonical proj_sub_domType :=
-  Eval hnf in DomType proj_sub proj_sub_domMixin.
+Canonical proj_dom_subDomType :=
+  Eval hnf in SubDomType proj_dom proj_domP.
+Definition proj_dom_domMixin := [domMixin of proj_dom by <:].
+Canonical proj_dom_domType :=
+  Eval hnf in DomType proj_dom proj_dom_domMixin.
 
-End LCSubDom.
+End ProjDom.
 
-Coercion proj_sub : proj >-> Sortclass.
+Coercion proj_dom : proj >-> Sortclass.
 
 Module Cont.
 
