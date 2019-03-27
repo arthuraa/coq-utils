@@ -26,7 +26,9 @@ v8.8, as well as the following [OPAM][5] packages:
 - `coq-mathcomp-ssreflect`, >= v1.6
 - `coq-mathcomp-fingroup`, >= v1.6
 - `coq-mathcomp-algebra`, >= v1.6
-- `coq-extructures`, >= v0.1
+
+Additionally, you'll need the development version of Extensional Structures,
+available at https://github.com/arthuraa/extructures (at least commit 4d29a4d6).
 
 To compile the package, simply run
 

@@ -979,8 +979,7 @@ Definition fset_nominalMixin :=
   NominalMixin fset_renameD fset_namesNNE fset_namesTeq.
 Canonical fset_nominalType :=
   Eval hnf in NominalType (FSet.fset_type T') fset_nominalMixin.
-Canonical fset_of_nominalType :=
-  Eval hnf in [nominalType of {fset T'}].
+Canonical fset_of_nominalType := Eval hnf in [nominalType of {fset T'}].
 
 Lemma renamefsE s X : rename s X = rename s @: X.
 Proof. by []. Qed.
@@ -1105,6 +1104,8 @@ Qed.
 Canonical fset_trivialNominalType :=
   Eval hnf in TrivialNominalType (FSet.fset_type T')
                                  (TrivialNominalMixin trivial_rename).
+Canonical fset_of_trivialNominalType :=
+  Eval hnf in [trivialNominalType of {fset T'}].
 
 End SetTrivialNominalType.
 
@@ -1199,7 +1200,10 @@ Qed.
 Definition fmap_nominalMixin :=
   NominalMixin fmap_renameD fmap_namesNNE fmap_namesTeq.
 Canonical fmap_nominalType :=
-  Eval hnf in NominalType {fmap T -> S} fmap_nominalMixin.
+  Eval hnf in NominalType (FMap.fmap_type T S) fmap_nominalMixin.
+Canonical fmap_of_nominalType :=
+  Eval hnf in [nominalType of {fmap T -> S}].
+
 
 Lemma namesmE m : names m = names (domm m) :|: names (codomm m).
 Proof. by []. Qed.
@@ -1211,7 +1215,7 @@ rewrite (mem_imfset_can _ _ (renameK s) (renameKV s)) mem_domm.
 by case: (m (rename _ _)).
 Qed.
 
-Global Instance getm_eqvar : {eqvar (@getm T S (Phant _))}.
+Global Instance getm_eqvar : {eqvar @getm T S}.
 Proof. by move=> s m _ <- k _ <-; rewrite renamemE renameK. Qed.
 
 Lemma getm_nomR s m1 m2 : nomR s (getm m1) (getm m2) -> nomR s m1 m2.
@@ -1713,7 +1717,7 @@ case/fsubsetP/(_ _ n_in)/fsetUP: (supp_fperm s (names x)) => n_in_x.
   by rewrite in_fsetD negb_and negbK n_in_x orbF in_fsetU => ->.
 case/imfsetP: n_in_x n_in => {n} n n_in -> sn_in.
 move/fsubsetP/(_ _ sn_in): sub; rewrite fperm_supp => n_in_s.
-apply/fsetUP; right; rewrite -eq_l -renamenE -in_mem_eqvar renameT.
+apply/fsetUP; right; rewrite -eq_l -renamenE -mem_fset_eqvar renameT.
 move/fdisjointP/(_ _ n_in_s): dis.
 by rewrite in_fsetD negb_and negbK n_in orbF.
 Qed.
@@ -2164,7 +2168,7 @@ Definition PreRestr A x :=
   nosimpl (@PreRestr_ (A :&: names x, x) (fsubsetIr _ _)).
 
 Global Instance PreRestr_eqvar : {eqvar PreRestr}.
-Proof. by move=> s A _ <- x _ <-; eapply nomR_Sub; finsupp. Qed.
+Proof. by move=> s A _ <- x _ <-; finsupp. Qed.
 
 Definition prerestr_op (p : prerestr) := (val p).1.
 
@@ -2665,6 +2669,8 @@ Lemma oexposeE A x :
   if fdisjoint A (names x) then Some x else None.
 Proof.
 rewrite hideI namesrE /oexpose /fdisjoint; move: (fsubsetIr A (names x))=> sub.
+have ? : {finsupp fset0 (fun (A0 : {fset name}) (x0 : T) => if A0 == fset0 then Some x0 else None)}.
+  by move=> ???????? /=; finsupp.
 rewrite elimrE ?fdisjoint0s //.
 case: (fsetI _ _ =P fset0) => /= [->|]; last by rewrite fdisjoint0s.
 by rewrite fdisjoints0.
@@ -2673,7 +2679,7 @@ Qed.
 Global Instance oexpose_eqvar : {eqvar oexpose}.
 Proof.
 move=> s xx _ <-; case: xx / (restrP fset0) => [A x _].
-by rewrite hide_eqvar Restr_eqvar !oexposeE; finsupp.
+by rewrite hide_eqvar Restr_eqvar !oexposeE => ?; finsupp.
 Qed.
 
 End OExpose.
