@@ -1,6 +1,7 @@
 From mathcomp
 Require Import
-  ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype generic_quotient.
+  ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype generic_quotient
+  tuple finfun.
 
 From extructures
 Require Import ord fset fmap.
@@ -39,6 +40,8 @@ functions.
 - Define a quotient instance for cont.
 
 - Have a separate upper-bound predicate
+
+- Make countOrdType and finOrdType interfaces for extructures
 
 *)
 
@@ -114,6 +117,11 @@ End Maps.
 
 Arguments dommP {_ _} [_ _].
 Arguments dommPn {_ _} [_ _].
+
+Definition tuple_ordMixin (T : ordType) (n : nat) :=
+  [ordMixin of n.-tuple T by <:].
+Canonical tuple_ordType (T : ordType) (n : nat) :=
+  Eval hnf in OrdType (n.-tuple T) (tuple_ordMixin T n).
 
 Module Po.
 
@@ -432,11 +440,20 @@ End DiscPo.
 
 Export DiscPo.Exports.
 
-Canonical void_poType := Eval hnf in [poType for void by //].
+Lemma void_apprP : Po.axioms_of true (fun x y : void => true).
+Proof. by split; case. Qed.
+Definition void_poMixin := PoMixin void_apprP.
+Canonical void_poType := Eval hnf in PoType void void_poMixin.
 Canonical void_discPoType := Eval hnf in [discPoType for void].
 
 Canonical bool_poType := Eval hnf in [poType for bool by //].
 Canonical bool_discPoType := Eval hnf in [discPoType for bool].
+
+Lemma unit_apprP : Po.axioms_of true (fun x y : unit => true).
+Proof. by split=> // - [] []. Qed.
+Definition unit_poMixin := PoMixin unit_apprP.
+Canonical unit_poType := Eval hnf in PoType unit unit_poMixin.
+Canonical unit_discPoType := Eval hnf in [discPoType for unit].
 
 Section DiscPoTheory.
 
@@ -683,6 +700,11 @@ Notation "[ 'ppoMixin' 'of' T 'by' <: 'using' P0 ]" :=
   (at level 0, format "[ 'ppoMixin'  'of'  T  'by'  <:  'using'  P0 ]")
   : form_scope.
 
+Lemma unit_botP x : tt ⊑ x.
+Proof. by case: x. Qed.
+Definition unit_ppoMixin := PPoMixin unit_botP.
+Canonical unit_ppoType := Eval hnf in PPoType unit unit_ppoMixin.
+
 Section ProdPPoType.
 
 Variables (bT bS : bool) (T : ppoType bT) (S : ppoType bS).
@@ -722,265 +744,6 @@ Definition coh_ppoMixin := PPoMixin coh_botP.
 Canonical coh_ppoType := Eval hnf in PPoType (coh T) coh_ppoMixin.
 
 End CohPPoType.
-
-Section FFun.
-
-Variables (T : ordType) (S : ppoType true).
-
-Record ffun := FFun {
-  ffun_val : {fmap T -> S};
-  _        : ⊥ \notin codomm ffun_val
-}.
-Definition ffun_of & phant (T -> S) := ffun.
-
-Identity Coercion ffun_of_ffun : ffun_of >-> ffun.
-
-Notation "{ 'ffun' T }" := (ffun_of (Phant T))
-  (at level 0, format "{ 'ffun'  T }" ) : dom_scope.
-
-Canonical ffun_subType := [subType for ffun_val].
-Definition ffun_eqMixin := [eqMixin of ffun by <:].
-Canonical ffun_eqType := Eval hnf in EqType ffun ffun_eqMixin.
-Definition ffun_choiceMixin := [choiceMixin of ffun by <:].
-Canonical ffun_choiceType := Eval hnf in ChoiceType ffun ffun_choiceMixin.
-Definition ffun_ordMixin := [ordMixin of ffun by <:].
-Canonical ffun_ordType := Eval hnf in OrdType ffun ffun_ordMixin.
-
-Canonical ffun_of_subType := Eval hnf in [subType of {ffun T -> S}].
-Canonical ffun_of_eqType := Eval hnf in [eqType of {ffun T -> S}].
-Canonical ffun_of_choiceType := Eval hnf in [choiceType of {ffun T -> S}].
-Canonical ffun_of_ordType := Eval hnf in [ordType of {ffun T -> S}].
-
-Definition ffapp (f : ffun) (x : T) : S :=
-  if ffun_val f x is Some y then y else ⊥.
-
-Coercion ffapp : ffun >-> Funclass.
-
-Lemma eq_ffun (f g : {ffun T -> S}) : f =1 g <-> f = g.
-Proof.
-split=> [|-> //] fg; apply/val_inj/eq_fmap=> x.
-move: (fg x); rewrite /ffapp /=.
-case f_x: (ffun_val f x)=> [y1|];
-case g_x: (ffun_val g x)=> [y2|] //; first by move=> ->.
-- move=> e; suff: ⊥ \in codomm (ffun_val f) by rewrite (negbTE (valP f)).
-  by apply/codommP; exists x; rewrite -e.
-- move=> e; suff: ⊥ \in codomm (ffun_val g) by rewrite (negbTE (valP g)).
-  by apply/codommP; exists x; rewrite e.
-Qed.
-
-Program Definition ffun_of_fmap (f : {fmap T -> S}) : {ffun T -> S} :=
-  Sub (filterm (fun _ y => y != ⊥) f) _.
-
-Next Obligation.
-move=> f /=; apply/negP=> /codommP [x].
-rewrite filtermE; case: (f x)=> [y|] //=.
-case: eqP=> //= ? [?]; congruence.
-Qed.
-
-Lemma ffun_of_fmapE f x : ffun_of_fmap f x = if f x is Some y then y else ⊥.
-Proof.
-rewrite /ffun_of_fmap /ffapp filtermE; case f_x: (f x)=> [y|] //=.
-by case: eqP.
-Qed.
-
-Definition mkffun (f : T -> S) (X : {fset T}) : {ffun T -> S} :=
-  ffun_of_fmap (mkfmapf f X).
-
-Lemma mkffunE f X x : mkffun f X x = if x \in X then f x else ⊥.
-Proof. by rewrite /mkffun ffun_of_fmapE mkfmapfE; case: ifP. Qed.
-
-Implicit Types f g : {ffun T -> S}.
-
-Definition fsupp f := domm (ffun_val f).
-
-Lemma fsuppPn f x : reflect (f x = ⊥) (x \notin fsupp f).
-Proof.
-rewrite /ffapp; apply/(iffP dommPn)=> [->|] //.
-case f_x: (ffun_val f x)=> [y|] // e.
-by move/codommPn/(_ x): (valP f); rewrite f_x e eqxx.
-Qed.
-
-Lemma mem_fsupp f x : (x \in fsupp f) = (f x != ⊥).
-Proof. by apply/negb_inj; rewrite negbK; apply/(sameP (fsuppPn f x))/eqP. Qed.
-
-Lemma fsupp_ffun_of_fmap (f : {fmap T -> S}) :
-  fsupp (ffun_of_fmap f) =
-  fset (filter (fun x => f x != Some ⊥) (domm f)).
-Proof.
-apply/eq_fset=> x; rewrite in_fset mem_filter /fsupp /=.
-apply/(sameP idP)/(iffP idP).
-- case/andP=> n0 /dommP [y f_x]; rewrite mem_domm filtermE f_x /=.
-  by rewrite -(inj_eq (@Some_inj _)) -f_x n0 f_x.
-- rewrite !mem_domm filtermE; case f_x: (f x)=> [y|] //=.
-  by rewrite [in Some _ == _]eqE /=; case: ifP.
-Qed.
-
-Lemma fsupp_ffun_of_fmap_sub (f : {fmap T -> S}) :
-  fsubset (fsupp (ffun_of_fmap f)) (domm f).
-Proof.
-apply/fsubsetP=> x /dommP [/= v e]; apply/dommP; exists v.
-by move: e; rewrite filtermE; case: (f x)=> [y|] //=; case: ifP.
-Qed.
-
-Definition fappr f g :=
-  all (fun x => f x ⊑ g x) (fsupp f :|: fsupp g).
-
-Lemma fapprP f g : reflect (forall x, f x ⊑ g x) (fappr f g).
-Proof.
-rewrite /fappr; apply/(iffP allP); last by eauto.
-move=> P x; have [f_x|/fsuppPn ->] := boolP (x \in fsupp f); last exact: botP.
-by apply: P; rewrite in_fsetU f_x.
-Qed.
-
-Lemma fapprPn f g : reflect (exists x, f x ⋢ g x) (~~ fappr f g).
-Proof.
-rewrite /fappr; apply/(iffP allPn); first by case; eauto.
-case=> x Px; exists x=> //; rewrite in_fsetU mem_domm.
-by move: Px; rewrite /ffapp; case: (ffun_val f x); rewrite // botP.
-Qed.
-
-Lemma ffun_apprP : Po.axioms_of true fappr.
-Proof.
-split.
-- move=> f; apply/allP=> x _; exact: apprxx.
-- move=> g f h /fapprP fg /fapprP gh; apply/fapprP=> x.
-  exact: appr_trans (fg x) (gh x).
-- move=> f g /andP [/fapprP fg /fapprP gf]; apply/eq_ffun=> x.
-  by apply/appr_anti; rewrite fg gf.
-Qed.
-
-Definition ffun_poMixin := PoMixin ffun_apprP.
-Canonical ffun_poType := Eval hnf in PoType ffun ffun_poMixin.
-Canonical ffun_of_poType := Eval hnf in [poType of {ffun T -> S}].
-
-Program Definition ffun_bot : {ffun T -> S} :=
-  Sub emptym _.
-Next Obligation. by rewrite /= codomm0. Qed.
-
-Lemma ffun_botP f : ffun_bot ⊑ f.
-Proof. by apply/fapprP=> x; rewrite /ffapp /= botP. Qed.
-
-Definition ffun_ppoMixin := PPoMixin ffun_botP.
-Canonical ffun_ppoType := Eval hnf in PPoType ffun ffun_ppoMixin.
-Canonical ffun_of_ppoType := Eval hnf in [ppoType of {ffun T -> S}].
-
-Lemma fbotE x : ffapp ⊥ x = ⊥. Proof. by []. Qed.
-
-Lemma fsupp0 : fsupp ⊥ = fset0.
-Proof. exact: domm0. Qed.
-
-Lemma mkffunS (f : T -> S) X Y : fsubset X Y -> mkffun f X ⊑ mkffun f Y.
-Proof.
-move=> sub; apply/fapprP=> x; rewrite !mkffunE; case: ifP; rewrite ?botP //.
-by move=> x_X; rewrite (fsubsetP sub _ x_X) apprxx.
-Qed.
-
-End FFun.
-
-Notation "{ 'ffun' T }" := (ffun_of (Phant T))
-  (at level 0, format "{ 'ffun'  T }" ) : dom_scope.
-
-Arguments fapprP {_ _} [_ _].
-Arguments fapprPn {_ _} [_ _].
-
-Section FFunMap.
-
-Variables (T : ordType) (S S1 S2 R : ppoType true).
-Variable g : S -> R.
-Variable op : S1 -> S2 -> R.
-
-Definition mapf (f : {ffun T -> S}) : {ffun T -> R} :=
-  ffun_of_fmap (mkfmapf (g \o f) (fsupp f)).
-
-Lemma mapfE f :
-  g ⊥ = ⊥ ->
-  forall x, mapf f x = g (f x).
-Proof.
-move=> strict x; rewrite /mapf ffun_of_fmapE mkfmapfE /=.
-by rewrite /ffapp mem_domm; case: (ffun_val f x).
-Qed.
-
-Definition mapf_op (f1 : {ffun T -> S1}) (f2 : {ffun T -> S2}) :
-  {ffun T -> R} :=
-  ffun_of_fmap (mkfmapf (fun x => op (f1 x) (f2 x)) (fsupp f1 :|: fsupp f2)).
-
-Lemma mapf_opE f1 f2 :
-  op ⊥ ⊥ = ⊥ ->
-  forall x, mapf_op f1 f2 x = op (f1 x) (f2 x).
-Proof.
-move=> strict x; rewrite /mapf_op ffun_of_fmapE mkfmapfE.
-rewrite /ffapp in_fsetU !mem_domm.
-by case: (ffun_val f1 x) (ffun_val f2 x)=> [y1|] // [y2|].
-Qed.
-
-Lemma fsupp_mapf_op f1 f2 :
-  op ⊥ ⊥ = ⊥ ->
-  fsubset (fsupp (mapf_op f1 f2)) (fsupp f1 :|: fsupp f2).
-Proof.
-move=> opBB; apply/fsubsetP=> x; apply: contraTT.
-rewrite in_fsetU; case/norP=> /fsuppPn f1_x /fsuppPn f2_x.
-by apply/fsuppPn; rewrite mapf_opE // f1_x f2_x.
-Qed.
-
-End FFunMap.
-
-Section FFunMap2.
-
-Variables (T1 T2 : ordType) (S1 S2 : ppoType true).
-
-Definition mapf2 (f : T1 -> T2) (g : S1 -> S2) (h : {ffun T1 -> S1}) :=
-  ffun_of_fmap (mapm2 f g (val h)).
-
-Lemma mapf2E (f : T1 -> T2) (g : S1 -> S2) (h : {ffun T1 -> S1}) (x : T1) :
-  injective f -> g ⊥ = ⊥ -> mapf2 f g h (f x) = g (h x).
-Proof.
-move=> f_inj eg; rewrite /mapf2 ffun_of_fmapE mapm2E // /ffapp /=.
-by case: (ffun_val h x).
-Qed.
-
-End FFunMap2.
-
-Section FFunCoh.
-
-Variables (T : ordType) (S : ppoType true).
-Implicit Types f : {ffun T -> coh S}.
-Implicit Types g : {ffun T -> S}.
-
-Definition ffun_coh f : coh {ffun T -> S} :=
-  if Incoh \in codomm (ffun_val f) then Incoh
-  else Coh (ffun_of_fmap (mkfmapfp (option_of_coh \o f) (fsupp f))).
-
-Variant ffun_coh_spec f : coh {ffun T -> S} -> Prop :=
-| FFunCohCoh g of (forall x, f x = Coh (g x)) : ffun_coh_spec f (Coh g)
-| FFunCohIncoh x of x \in fsupp f & f x = Incoh : ffun_coh_spec f Incoh.
-
-Lemma ffun_cohP f : ffun_coh_spec f (ffun_coh f).
-Proof.
-rewrite /ffun_coh; case: ifPn.
-  case/codommP=> x e.
-  have x_supp : x \in fsupp f by apply/dommP; exists Incoh.
-  have f_x : f x = Incoh by rewrite /ffapp e.
-  exact: FFunCohIncoh x_supp f_x.
-move=> /codommPn f_coh; apply: FFunCohCoh=> x.
-rewrite ffun_of_fmapE mkfmapfpE /= /ffapp.
-by case: ifPn (f_coh x)=> [/dommP [[y|] ->]|/dommPn ->].
-Qed.
-
-Lemma ffun_coh_appr f g : f ⊑ mapf Coh g = ffun_coh f ⊑ Coh g.
-Proof.
-case: ffun_cohP=> [h hP|x x_supp f_x]; last first.
-  by apply/negbTE/fapprPn; exists x; rewrite mapfE ?f_x.
-apply/(sameP fapprP)/(iffP fapprP).
-  move=> h_g x; rewrite mapfE // hP; exact: h_g.
-move=> f_g x; suff: Coh (h x) ⊑ Coh (g x) by [].
-by rewrite -hP -mapfE.
-Qed.
-
-Lemma ffun_cohE f g :
-  ffun_coh f = Coh g -> forall x, f x = Coh (g x).
-Proof. by case: ffun_cohP=> // {g} g gP [<-]. Qed.
-
-End FFunCoh.
 
 Module Dom.
 
@@ -1138,6 +901,10 @@ Canonical quot_po_domType := Eval hnf in DomType (quot_po T) quot_po_domMixin.
 Canonical quot_po_of_domType := Eval hnf in [domType of {quot_po T}].
 
 End QuotDomType.
+
+Definition unit_domMixin :=
+  @DomMixin _ unit_poType (fun _ _ => Coh tt) (fun _ _ _ => erefl).
+Canonical unit_domType := Eval hnf in DomType unit unit_domMixin.
 
 Section ProdDomType.
 
@@ -1405,6 +1172,7 @@ Definition poType := @Po.Pack anti cT xclass.
 Definition ppoType := @PPo.Pack anti cT xclass.
 Definition domType := @Dom.Pack anti cT xclass.
 Definition pdomType := @PDom.Pack anti cT xclass.
+Definition finDomType := @FinDom.Pack anti cT (@FinDom.Class _ _ xclass (base2 xclass)).
 
 End ClassDef.
 
@@ -1431,63 +1199,199 @@ Coercion domType : type >-> Dom.type.
 Canonical domType.
 Coercion pdomType : type >-> PDom.type.
 Canonical pdomType.
+Coercion finDomType : type >-> FinDom.type.
+Canonical finDomType.
 Notation finPDomType := type.
 Notation FinPDomType T := (@pack _ T _ _ id _ _ id).
-Notation "[ 'finDomType' 'of' T 'for' cT ]" :=  (@clone _ T cT _ idfun)
-  (at level 0, format "[ 'finDomType'  'of'  T  'for'  cT ]") : form_scope.
-Notation "[ 'finDomType' 'of' T ]" := (@clone _ T _ _ id)
-  (at level 0, format "[ 'finDomType'  'of'  T ]") : form_scope.
+Notation "[ 'finPDomType' 'of' T 'for' cT ]" :=  (@clone _ T cT _ idfun)
+  (at level 0, format "[ 'finPDomType'  'of'  T  'for'  cT ]") : form_scope.
+Notation "[ 'finPDomType' 'of' T ]" := (@clone _ T _ _ id)
+  (at level 0, format "[ 'finPDomType'  'of'  T ]") : form_scope.
 End Exports.
 
 End FinPDom.
 
 Export FinPDom.Exports.
 
-Section FFunDomType.
+Section FFun.
 
-Variables (T : ordType) (S : pdomType true).
-Implicit Types (f g h : {ffun T -> S}) (x : T) (y : S).
+Variables (T : finDomType true) (S : poType true).
 
-Definition flub f g : coh {ffun T -> S} :=
-  ffun_coh (mapf_op (@lub true S) f g).
+Definition ffun_ordMixin := [ordMixin of finfun_type T S by <:].
+Canonical ffun_ordType :=
+  Eval hnf in OrdType (finfun_type T S) ffun_ordMixin.
+Canonical ffun_of_ordType :=
+  Eval hnf in [ordType of {ffun T -> S}].
 
-Lemma flub_appr f g h : flub f g ⊑ Coh h = (f ⊑ h) && (g ⊑ h).
+Implicit Types (f g h : {ffun T -> S}).
+
+Definition fappr f g := [forall x : T, f x ⊑ g x].
+
+Lemma fapprP f g : reflect (forall x, f x ⊑ g x) (fappr f g).
+Proof. exact: forallP. Qed.
+
+Lemma fapprPn f g : reflect (exists x, f x ⋢ g x) (~~ fappr f g).
+Proof. by apply/(iffP existsP). Qed.
+
+Lemma ffun_apprP : Po.axioms_of true fappr.
 Proof.
-rewrite /flub -ffun_coh_appr; apply/(sameP fapprP)/(iffP andP).
-  case=> /fapprP fh /fapprP gh x; rewrite mapf_opE ?lubxB ?mapfE ?lub_appr //.
-  by rewrite fh gh.
-by move=> fgh; split; apply/fapprP=> x;
-move/(_ x): fgh; rewrite mapf_opE ?lubxB ?mapfE ?lub_appr //; case/andP.
+split.
+- move=> f; apply/fapprP=> x; exact: apprxx.
+- move=> g f h /fapprP fg /fapprP gh; apply/fapprP=> x.
+  exact: appr_trans (fg x) (gh x).
+- move=> f g /andP [/fapprP fg /fapprP gf]; apply/ffunP=> x.
+  by apply/appr_anti; rewrite fg gf.
 Qed.
 
-Definition ffun_domMixin := DomMixin flub_appr.
-Canonical ffun_domType := Eval hnf in DomType (ffun T S) ffun_domMixin.
-Canonical ffun_pdomType := Eval hnf in PDomType (ffun T S).
-Canonical ffun_of_domType := Eval hnf in [domType of {ffun T -> S}].
-Canonical ffun_of_pdomType := Eval hnf in [pdomType of {ffun T -> S}].
+Definition ffun_poMixin := PoMixin ffun_apprP.
+Canonical ffun_poType := Eval hnf in PoType (finfun_type T S) ffun_poMixin.
+Canonical ffun_of_poType := Eval hnf in [poType of {ffun T -> S}].
+
+End FFun.
+
+Arguments fapprP {_ _} [_ _].
+Arguments fapprPn {_ _} [_ _].
+
+Section FFunPPoType.
+
+Variables (T : finDomType true) (S : ppoType true).
+
+Implicit Types f : {ffun T -> S}.
+
+Lemma ffun_botP f : finfun (fun _ => ⊥) ⊑ f.
+Proof. by apply/fapprP=> x; rewrite ffunE botP. Qed.
+
+Definition ffun_ppoMixin := PPoMixin ffun_botP.
+Canonical ffun_ppoType := Eval hnf in PPoType (finfun_type T S) ffun_ppoMixin.
+Canonical ffun_of_ppoType := Eval hnf in [ppoType of {ffun T -> S}].
+
+Lemma fbotE x : (⊥ : {ffun T -> S}) x = ⊥. Proof. by rewrite ffunE. Qed.
+
+End FFunPPoType.
+
+Section FFunDomType.
+
+Variables (T : finDomType true) (S : domType true).
+
+Implicit Types f g h : {ffun T -> S}.
+
+Lemma flub_proof f g :
+  [forall x, f x ⊔ g x] ->
+  forall x, exists y, f x ⊔ g x == Coh y.
+Proof.
+move=> /forallP e x; move/(_ x): e.
+by case: lub=> [y|] //= _; exists y.
+Qed.
+
+Definition flub f g : coh {ffun T -> S} :=
+  if decP (@idP [forall x, f x ⊔ g x]) is left e then
+    Coh (finfun (fun x => xchoose (flub_proof e x)))
+  else Incoh.
 
 Variant flub_spec f g : coh {ffun T -> S} -> Prop :=
 | FLubCoh h of (forall x, f x ⊔ g x = Coh (h x)) : flub_spec f g (Coh h)
-| FLubIncoh x of
-  x \in fsupp f & x \in fsupp g & f x ⊔ g x = Incoh : flub_spec f g Incoh.
+| FLubIncoh x of f x ⊔ g x = Incoh : flub_spec f g Incoh.
+
+(* FIXME: could use the above proof *)
+Lemma flub_appr f g h : flub f g ⊑ Coh h = (f ⊑ h) && (g ⊑ h).
+Proof.
+apply/(sameP idP)/(iffP andP)=> [[fh gh]|fgh]; last split.
+- have e: [forall x, f x ⊔ g x].
+    apply/forallP=> x; move: (lub_appr (f x) (g x) (h x)).
+    by rewrite (fapprP fh x) (fapprP gh x); case: lub.
+  rewrite /flub; case: decP; last by rewrite e.
+  move=> {e} e; apply/fapprP=> x; rewrite ffunE.
+  move: (xchooseP (flub_proof e x)) (lub_appr (f x) (g x) (h x)).
+  move=> /eqP {1}->.
+  by rewrite (fapprP fh x) (fapprP gh x).
+- move: fgh; rewrite /flub; case: decP=> // e /fapprP fgh.
+  apply/fapprP=> x; move/(_ x): fgh; rewrite ffunE; apply: appr_trans.
+  by move/eqP: (xchooseP (flub_proof e x)) (appr_lubl (f x) (g x)) => {1}->.
+- move: fgh; rewrite /flub; case: decP=> // e /fapprP fgh.
+  apply/fapprP=> x; move/(_ x): fgh; rewrite ffunE; apply: appr_trans.
+  by move/eqP: (xchooseP (flub_proof e x)) (appr_lubr (f x) (g x)) => {1}->.
+Qed.
+
+Definition ffun_domMixin := DomMixin flub_appr.
+Canonical ffun_domType := Eval hnf in DomType (finfun_type T S) ffun_domMixin.
+Canonical ffun_of_domType := Eval hnf in [domType of {ffun T -> S}].
 
 Lemma flubP f g : flub_spec f g (f ⊔ g).
 Proof.
-rewrite /lub /= /flub; case: ffun_cohP=> [h hP|x _].
-  by apply: FLubCoh=> x; rewrite -hP mapf_opE ?lubxx.
-rewrite mapf_opE ?lubxx // => incoh.
-have /andP [f_x g_x]: (x \in fsupp f) && (x \in fsupp g).
-  rewrite !mem_fsupp -negb_or; apply: contraTN (introT eqP incoh).
-  by case/orP=> /eqP ->; rewrite ?lubxB ?lubBx.
-exact: FLubIncoh incoh.
+rewrite /lub /= /flub; case: decP=> [e|/negP/existsP].
+- apply: FLubCoh=> x; rewrite ffunE.
+  exact/eqP/(xchooseP (flub_proof e x)).
+- case=> x xP; apply: (@FLubIncoh f g x).
+  by case: lub xP.
 Qed.
 
-Lemma flubE f g h x : f ⊔ g = Coh h -> f x ⊔ g x = Coh (h x).
+Lemma flubE f g h :
+  f ⊔ g = Coh h ->
+  forall x, f x ⊔ g x = Coh (h x).
+Proof. by case: flubP=> // {h} h hP [<-]. Qed.
+
+Lemma flub_Coh f g h :
+  f ⊔ g = Coh h <-> forall x, f x ⊔ g x = Coh (h x).
 Proof.
-by rewrite {1}/lub /= /flub /= => /ffun_cohE/(_ x); rewrite mapf_opE ?lubxx.
+split; first exact: flubE.
+case: flubP=> [h'|].
+- move=> h'P hP; congr Coh; apply/ffunP => x.
+  suff: Coh (h' x) = Coh (h x) by case.
+  by rewrite -h'P -hP.
+- by move=> x xP /(_ x); rewrite xP.
+Qed.
+
+Lemma flub_Incoh f g :
+  f ⊔ g = Incoh <-> exists x, f x ⊔ g x = Incoh.
+Proof.
+case: flubP=> [h hP|x xP].
+- by split=> //; case=> x; rewrite hP.
+- by split=> // _; exists x.
 Qed.
 
 End FFunDomType.
+
+Canonical ffun_pdomType (T : finDomType true) (S : pdomType true) :=
+  Eval hnf in PDomType (finfun_type T S).
+
+Canonical ffun_of_pdomType (T : finDomType true) (S : pdomType true) :=
+  Eval hnf in PDomType {ffun T -> S}.
+
+Canonical ffun_finDomType (T S : finDomType true) :=
+  Eval hnf in FinDomType (finfun_type T S).
+
+Canonical ffun_of_finDomType (T S : finDomType true) :=
+  Eval hnf in FinDomType {ffun T -> S}.
+
+Canonical ffun_finPDomType (T : finDomType true) (S : finPDomType true) :=
+  Eval hnf in FinPDomType (finfun_type T S).
+
+Canonical ffun_of_finPDomType (T : finDomType true) (S : finPDomType true) :=
+  Eval hnf in FinPDomType {ffun T -> S}.
+
+Canonical unit_pdomType := Eval hnf in PDomType unit.
+
+Canonical unit_finDomType := Eval hnf in FinDomType unit.
+
+Canonical unit_finPDomType := Eval hnf in FinPDomType unit.
+
+Canonical option_finDomType (T : finDomType true) :=
+  Eval hnf in FinDomType (option T).
+
+Canonical option_finPDomType (T : finDomType true) :=
+  Eval hnf in FinPDomType (option T).
+
+Canonical prod_finDomType (T S : finDomType true) :=
+  Eval hnf in FinDomType (T * S).
+
+Canonical prod_pdomType (T S : pdomType true) :=
+  Eval hnf in PDomType (T * S).
+
+Canonical prod_finPDomType (T S : finPDomType true) :=
+  Eval hnf in FinPDomType (T * S).
+
+Canonical sum_finDomType (T S : finDomType true) :=
+  Eval hnf in FinDomType (T + S).
 
 Section Lubn.
 
@@ -1670,28 +1574,47 @@ Definition proj_ppoMixin := PPoMixin proj_botP.
 Canonical proj_ppoType := PPoType proj proj_ppoMixin.
 Canonical proj_of_ppoType := Eval hnf in [ppoType of {proj T}].
 
+Definition pred_of_proj (X : proj) :=
+  [pred x : T | x \in val X].
+Canonical proj_predType := mkPredType pred_of_proj.
+Canonical proj_of_predType := [predType of {proj T}].
+
 Definition projU X Y := proj_of_fset (X :|: Y).
 
-Lemma projUl X Y : fsubset X (projU X Y).
-Proof. exact: (fsubset_trans (fsubsetUl X Y) (lub_closure_ext _)). Qed.
-
-Lemma projUr X Y : fsubset Y (projU X Y).
-Proof. exact: (fsubset_trans (fsubsetUr X Y) (lub_closure_ext _)). Qed.
+Lemma projUP X Y x :
+  reflect (exists x' y', [/\ x' \in X, y' \in Y & x' ⊔ y' = Coh x])
+          (x \in projU X Y).
+Proof.
+apply/(iffP (lub_closureP _ _));  last first.
+  case=> [x' [y' [x'P y'P x'y']]]; exists [fset x'; y']; rewrite ?lubn2 //.
+  by apply/fsubsetP=> _ /fset2P [] ->; rewrite in_fsetU ?x'P ?y'P ?orbT.
+case=> Z sub; have -> : Z = Z :&: X :|: Z :&: Y.
+  apply/eqP; rewrite eqEfsubset fsubUset !fsubsetIl !andbT.
+  apply/fsubsetP=> z z_Z; rewrite in_fsetU !in_fsetI.
+  by rewrite z_Z /= -in_fsetU (fsubsetP sub _ z_Z).
+rewrite lubnU; case lubn_X: (lubn (Z :&: X))=> [x'|] //=.
+case lubn_Y: (lubn (Z :&: Y))=> [y'|] //= xy.
+exists x', y'; split=> //.
+- rewrite inE -(eqP (valP X)); apply/lub_closureP.
+  by exists (Z :&: X); rewrite //= fsubsetIr.
+- rewrite inE -(eqP (valP Y)); apply/lub_closureP.
+  by exists (Z :&: Y); rewrite //= fsubsetIr.
+Qed.
 
 End Projections.
 
 Notation "{ 'proj' T }" := (proj_of (Phant T))
   (at level 0, format "{ 'proj'  T }") : type_scope.
 
-Definition pred_of_proj (T : pdomType true) (X : proj T) :=
-  [pred x : T | x \in val X].
-Canonical proj_predType T := mkPredType (@pred_of_proj T).
-Canonical proj_of_predType (T : pdomType true) := [predType of {proj T}].
-
 Lemma projB (T : pdomType true) (X : {proj T}) : ⊥ \in X.
 Proof.
 rewrite inE -(eqP (valP X)); apply/lub_closureP.
 by exists fset0; rewrite ?fsub0set ?lubn0.
+Qed.
+
+Lemma eq_proj (T : pdomType true) (X Y : {proj T}) : X =i Y <-> X = Y.
+Proof.
+split=> [|-> //] XY; apply/val_inj/eq_fset; exact: XY.
 Qed.
 
 Section ProjMap.
@@ -1703,7 +1626,13 @@ Implicit Types (X Y : {proj T}).
 Definition mapp (f : T -> S) X : {proj S} :=
   proj_of_fset (f @: X).
 
+Lemma eq_mapp f g : f =1 g -> mapp f =1 mapp g.
+Proof. by move=> fg X; rewrite /mapp (eq_imfset fg). Qed.
+
 End ProjMap.
+
+Lemma mapp_id (T : pdomType true) (X : {proj T}) : mapp id X = X.
+Proof. apply/val_inj; rewrite /= imfset_id; apply/eqP/(valP X). Qed.
 
 Section FinProj.
 
@@ -1730,7 +1659,10 @@ Definition monotone bT bS (T : poType bT) (S : poType bS) (f : T -> S) :=
 Definition isotone bT bS (T : poType bT) (S : poType bS) (f : T -> S) :=
   forall x y, (f x ⊑ f y) = (x ⊑ y).
 
-Lemma mono_comp bT bS bR (T : poType bT) (S : poType bS) (R : poType bR)
+Lemma monotone_id bT (T : poType bT) : monotone (@id T).
+Proof. by []. Qed.
+
+Lemma monotone_comp bT bS bR (T : poType bT) (S : poType bS) (R : poType bR)
   (f : T -> S) (g : S -> R) :
   monotone f -> monotone g -> monotone (g \o f).
 Proof.
@@ -1748,6 +1680,11 @@ Implicit Types X : {fset T}.
 
 Definition lub_preserving f :=
   forall x y, f x ⊔ f y = if x ⊔ y is Coh z then Coh (f z) else Incoh.
+
+Lemma eq_lub_preserving f g : lub_preserving f -> f =1 g -> lub_preserving g.
+Proof.
+by move=> fP e x y; rewrite -!e fP; case: lub=> //= ?; rewrite e.
+Qed.
 
 Lemma iso_mono f : isotone f -> monotone f.
 Proof. by move=> iso_f x y; rewrite iso_f. Qed.
@@ -1841,6 +1778,16 @@ by case/imfsetP=> ? ? /f_inj ->.
 Qed.
 
 End EmbeddingsPointed.
+
+Lemma mapp_comp (T S R : pdomType true) (g : S -> R) (f : T -> S)
+  (X : {proj T}) :
+  g ⊥ = ⊥ -> lub_preserving g ->
+  f ⊥ = ⊥ -> lub_preserving f ->
+  mapp (g \o f) X = mapp g (mapp f X).
+Proof.
+move=> ????; apply/val_inj; rewrite /= imfset_comp.
+by rewrite !lub_closure_imfset // !(eqP (valP X)).
+Qed.
 
 Section SubPoDomType.
 
@@ -1977,15 +1924,15 @@ Coercion proj_dom : proj >-> Sortclass.
 
 Section Retract.
 
-Variables T S : pdomType true.
+Variables (T : finPDomType true) (S : pdomType true).
 Variable f : T -> S.
 Hypothesis f_str : f ⊥ = ⊥.
 Hypothesis f_lub : lub_preserving f.
 
-Implicit Types (X Y : {proj T}) (x y : T) (A B : {proj S}) (a b : S).
+Implicit Types (x y : T) (a b : S).
 
-Definition retract X a : X :=
-  if lubn (fset (enum [pred x : X | f x ⊑ a])) is Coh x then x
+Definition retract a : T :=
+  if lubn (fset (enum [pred x | f x ⊑ a])) is Coh x then x
   else ⊥.
 
 (*Lemma retract0 a : retract proj0 a = ⊥.
@@ -1997,50 +1944,78 @@ by rewrite /retract /=; case: ifP=> _; rewrite -?fset1E -?fset0E.
 Qed.
 *)
 
-Lemma in_retractK X (x : X) :
-  injective (f \o @proj_elt _ X) -> retract X (f x) = x.
+Lemma retractK x : injective f -> retract (f x) = x.
 Proof.
 move=> f_inj; rewrite /retract (_ : lubn _ = Coh x) //.
 apply/esym/lubn_unique; case=> /= [y|]; last by apply/esym/allP=> y.
 apply/(sameP idP)/(iffP allP).
   by apply; rewrite in_fset mem_enum inE apprxx.
-move=> xy z; rewrite in_fset mem_enum inE // (inj_iso f_inj).
-  by move=> xz; apply: appr_trans xy.
-apply/lub_preserving_comp=> //; exact: lub_val.
+move=> xy z; rewrite in_fset mem_enum inE // (inj_iso f_inj f_lub) .
+by move=> xz; apply: appr_trans xy.
 Qed.
 
-Lemma retractK X (x : X) : injective f -> retract X (f x) = x.
+Lemma retract_appr a : f (retract a) ⊑ a.
 Proof.
-move=> f_inj; apply: in_retractK; apply: inj_comp=> //; exact: val_inj.
-Qed.
-
-Lemma retract_appr X a : f (retract X a) ⊑ a.
-Proof.
-rewrite /retract; set Y := fset _; have: lubn ((f \o val) @: Y) ⊑ Coh a.
+rewrite /retract; set Y := fset _; have: lubn (f @: Y) ⊑ Coh a.
   rewrite lubn_appr; apply/allP=> _ /imfsetP [x xP ->].
   by move: xP; rewrite /Y in_fset mem_filter; case/andP.
-move: (lubn_apprG ((f \o val) @: Y) (Coh a)); rewrite lubn_imfset //.
-  by case: lubn.
-apply: lub_preserving_comp=> //; exact: lub_val.
+by move: (lubn_apprG (f @: Y) (Coh a)); rewrite lubn_imfset //; case: lubn.
 Qed.
 
-Lemma retract_mono X : monotone (retract X).
+Lemma retract_mono : monotone retract.
 Proof.
 move=> a b ab; rewrite /retract.
-set Ya := fset (enum [pred x : X | f x ⊑ a]).
-set Yb := fset (enum [pred x : X | f x ⊑ b]).
+set Ya := fset (enum [pred x | f x ⊑ a]).
+set Yb := fset (enum [pred x | f x ⊑ b]).
 have Yab : fsubset Ya Yb.
   apply/fsubsetP=> c; rewrite !in_fset !mem_enum !inE => e.
   by apply: appr_trans ab.
-have: lubn ((f \o val) @: Yb) ⊑ Coh b.
+have: lubn (f @: Yb) ⊑ Coh b.
   rewrite lubn_appr; apply/allP=> _ /imfsetP [x xP ->].
   by move: xP; rewrite /Yb in_fset mem_filter; case/andP.
 move: (lubnS Yab); rewrite lubn_imfset //.
-  case: (lubn Ya) (lubn Yb)=> [a'|] [b'|] //.
-apply: lub_preserving_comp=> //; exact: lub_val.
+by case: (lubn Ya) (lubn Yb)=> [a'|] [b'|] //.
+Qed.
+
+Lemma retractB : injective f -> retract ⊥ = ⊥.
+Proof. by move=> f_inj; rewrite -f_str retractK. Qed.
+
+(* The injectivity hypothesis could be removed if we weaken retractK *)
+Lemma retractA : injective f -> forall x b, f x ⊑ b = x ⊑ retract b.
+Proof.
+move=> f_inj x b; apply/(sameP idP)/(iffP idP).
+- move=> /(lub_preserving_mono f_lub) xb; apply: appr_trans xb _.
+  exact: retract_appr.
+- by move=> /retract_mono; rewrite retractK.
 Qed.
 
 End Retract.
+
+Lemma eq_retract (T : finPDomType true) (S : pdomType true) (f g : T -> S) :
+  f =1 g -> retract f =1 retract g.
+Proof.
+move=> fg x; have e: [pred y | f y ⊑ x] =i [pred y | g y ⊑ x].
+  by move=> y; rewrite !inE fg.
+by rewrite /retract (eq_enum e).
+Qed.
+
+Lemma retract_comp (T S : finPDomType true) (R : pdomType true)
+  (g : S -> R) (f : T -> S) :
+  injective g -> g ⊥ = ⊥ -> lub_preserving g ->
+  injective f -> f ⊥ = ⊥ -> lub_preserving f ->
+  retract (g \o f) =1 retract f \o retract g.
+Proof.
+move=> g_inj g_str g_lub f_inj f_str f_lub x /=.
+apply/appr_anti; rewrite -(@retractA _ _ f) // -(@retractA _ _ g) //.
+rewrite (@retract_appr _ _ (g \o f)) /= ?f_str //; last first.
+  exact/lub_preserving_comp.
+rewrite -(@retractA _ _ (g \o f)) /=; first last.
+- exact/inj_comp.
+- exact/lub_preserving_comp.
+- by rewrite f_str.
+apply: appr_trans (retract_appr g_str g_lub x).
+exact/(lub_preserving_mono g_lub)/retract_appr.
+Qed.
 
 (*Lemma retract_imfset (T S R : pdomType true) (f : T -> S) (g : S -> R) (X : {proj T}) x :
   injective f -> f ⊥ = ⊥ -> lub_preserving f ->
@@ -2063,14 +2038,14 @@ move=> f_inj f_lub; apply: appr_anti; apply/andP; split.
   + by rewrite inj_iso //; move: (project_appr X x); rewrite X_x.
 Qed.*)
 
-Section FMonotone.
+Section Mono.
 
-Variables (T : finPDomType true) (S : pdomType true).
+Variables (T : finDomType true) (S : domType true).
 
 Definition monotoneb (f : T -> S) :=
   [forall x : T, forall y, x ⊑ y ==> f x ⊑ f y].
 
-Lemma monotonebP f : reflect (monotone f) (monotoneb f).
+Lemma monotoneP f : reflect (monotone f) (monotoneb f).
 Proof.
 apply/(iffP idP).
 - move=> f_mono x y xy.
@@ -2092,7 +2067,7 @@ Notation "{ 'mono' T }" := (mono_of (Phant T))
 
 Implicit Types f g h : {mono T -> S}.
 
-Canonical mono_subType := [subType for mono_val].
+Canonical mono_subType := Eval hnf in [subType for mono_val].
 Definition mono_eqMixin := [eqMixin of mono by <:].
 Canonical mono_eqType := Eval hnf in EqType mono mono_eqMixin.
 Definition mono_choiceMixin := [choiceMixin of mono by <:].
@@ -2103,64 +2078,128 @@ Definition mono_poMixin := [poMixin of mono by <:].
 Canonical mono_poType := Eval hnf in PoType mono mono_poMixin.
 Canonical mono_subPoType := Eval hnf in SubPoType mono (fun _ _ => erefl).
 
-Program Definition mono_bot := @Mono ⊥ _.
-Next Obligation.
-by apply/monotonebP=> x y xy; rewrite fbotE botP.
-Qed.
-
-Lemma mono_botP f : mono_bot ⊑ f.
-Proof. by apply/fapprP=> x; rewrite fbotE botP. Qed.
-
-Definition mono_ppoMixin := PPoMixin mono_botP.
-Canonical mono_ppoType := Eval hnf in PPoType mono mono_ppoMixin.
-
 Lemma monoP f : monotone f.
-Proof. exact/monotonebP/(valP f). Qed.
+Proof. exact/monotoneP/(valP f). Qed.
 
 Lemma monotoneb_lub f g hh : val f ⊔ val g = Coh hh -> monotoneb hh.
 Proof.
-move=> fg; apply/monotonebP=> x y xy.
-suff: Coh (hh x) ⊑ Coh (hh y) by []; rewrite -!(flubE _ fg).
+move=> fg; apply/monotoneP=> x y xy.
+suff: Coh (hh x) ⊑ Coh (hh y) by []; rewrite -!(flubE fg).
 by apply: mono_lub; apply: monoP.
 Qed.
 
 Definition mono_domMixin := [domMixin of mono by <: using monotoneb_lub].
 Canonical mono_domType := Eval hnf in DomType mono mono_domMixin.
-Canonical mono_subDomType := [subDomType for mono].
-Canonical mono_pdomType := Eval hnf in PDomType mono.
+Canonical mono_subDomType := Eval hnf in [subDomType for mono].
 
 Canonical mono_of_subType := Eval hnf in [subType of {mono T -> S}].
 Canonical mono_of_eqType := Eval hnf in [eqType of {mono T -> S}].
 Canonical mono_of_choiceType := Eval hnf in [choiceType of {mono T -> S}].
 Canonical mono_of_ordType := Eval hnf in [ordType of {mono T -> S}].
 Canonical mono_of_poType := Eval hnf in [poType of {mono T -> S}].
-Canonical mono_of_ppoType := Eval hnf in [ppoType of {mono T -> S}].
 Canonical mono_of_domType := Eval hnf in [domType of {mono T -> S}].
-Canonical mono_of_pdomType := Eval hnf in [pdomType of {mono T -> S}].
 
-Definition mkmono (f : T -> S) : {mono T -> S} :=
-  odflt mono_bot (insub (mkffun f projT)).
+Lemma finfun_monotone (f : T -> S) (H : monotone f) : monotoneb (finfun f).
+Proof. by apply/monotoneP=> x y xy; rewrite !ffunE; apply: H. Qed.
 
-Lemma mkmonoE (f : T -> S) : monotone f -> mkmono f =1 f.
+Definition mkmono (f : T -> S) (H : monotone f) : {mono T -> S} :=
+  Sub (finfun f) (finfun_monotone H).
+
+Lemma mkmonoE (f : T -> S) (H : monotone f) : @mkmono f H =1 f.
+Proof. exact: ffunE. Qed.
+
+Lemma mono_lub_Coh f g h :
+  f ⊔ g = Coh h <-> forall x, f x ⊔ g x = Coh (h x).
 Proof.
-move=> f_mono; have {f_mono} f_mono: monotoneb (mkffun f projT).
-  by apply/monotonebP=> x y xy; rewrite !mkffunE !in_projT f_mono.
-by move=> x; rewrite /mkmono insubT /= mkffunE in_projT.
+split.
+- by move=> fg; move: (lub_val f g); rewrite fg=> /flub_Coh; apply.
+- move=> /flub_Coh hP; move: (lub_val f g); rewrite /= hP.
+  by case: (f ⊔ g)=> [?|] //= [] /val_inj ->.
 Qed.
 
-End FMonotone.
+Lemma mono_lub_Incoh f g :
+  f ⊔ g = Incoh <-> exists x, f x ⊔ g x = Incoh.
+Proof.
+split.
+- by move=> fg; move: (lub_val f g); rewrite fg=> /flub_Incoh; apply.
+- move/flub_Incoh=> hP; move: (lub_val f g); rewrite /= hP.
+  by case: (f ⊔ g).
+Qed.
+
+End Mono.
 
 Notation "{ 'mono' T }" := (mono_of (Phant T))
   (at level 0, format "{ 'mono'  T }") : form_scope.
 
+Arguments mkmono {_ _} _ _.
+
+Definition mono_id (T : finDomType true) : {mono T -> T} :=
+  mkmono id (@monotone_id _ T).
+
+Definition mono_comp
+    (T S R : finDomType true) (g : {mono S -> R}) (f : {mono T -> S}) :
+    {mono T -> R} :=
+  mkmono (g \o f) (monotone_comp (monoP f) (monoP g)).
+
+Section MonoPDom.
+
+Variables (T : finDomType true) (S : pdomType true).
+
+Program Definition mono_bot : {mono T -> S} := @Mono _ _ ⊥ _.
+Next Obligation.
+by apply/monotoneP=> x y xy; rewrite fbotE botP.
+Qed.
+
+Lemma mono_botP f : mono_bot ⊑ f.
+Proof. by apply/fapprP=> x; rewrite fbotE botP. Qed.
+
+Definition mono_ppoMixin := PPoMixin mono_botP.
+Canonical mono_ppoType := Eval hnf in PPoType (mono T S) mono_ppoMixin.
+Canonical mono_of_ppoType := Eval hnf in [ppoType of {mono T -> S}].
+Canonical mono_pdomType := Eval hnf in PDomType (mono T S).
+Canonical mono_of_pdomType := Eval hnf in PDomType {mono T -> S}.
+
+End MonoPDom.
+
+Section MonoFin.
+
+Variables (T S : finDomType true).
+
+(* FIXME: The subtype-based notations for declaring count and fin mixins are not
+   working. *)
+Canonical mono_countMixin :=
+  Eval hnf in sub_countMixin [subType of mono T S].
+Canonical mono_countType :=
+  Eval hnf in CountType (mono T S) mono_countMixin.
+Canonical mono_of_countType :=
+  Eval hnf in [countType of {mono T -> S}].
+Canonical mono_subCountType := Eval hnf in [subCountType of mono T S].
+Canonical mono_of_subCountType := Eval hnf in [subCountType of {mono T -> S}].
+Definition mono_finMixin := SubFinMixin [subCountType of mono T S].
+Canonical mono_finType := Eval hnf in FinType (mono T S) mono_finMixin.
+Canonical mono_of_finType := Eval hnf in [finType of {mono T -> S}].
+Canonical mono_finDomType := Eval hnf in FinDomType (mono T S).
+Canonical mono_of_finDomType := Eval hnf in FinDomType (mono T S).
+
+End MonoFin.
+
+Canonical mono_finPDomType (T : finDomType true) (S : finPDomType true) :=
+  Eval hnf in FinPDomType (mono T S).
+Canonical mono_of_finPDomType (T : finDomType true) (S : finPDomType true) :=
+  Eval hnf in FinPDomType {mono T -> S}.
+
 Reserved Notation "g ∘ f" (at level 20, left associativity).
+
+Set Universe Polymorphism.
 
 Module Cat.
 
 Section ClassDef.
 
-Record class_of T := Class {
-  hom  : T -> T -> Type;
+Universes i.
+
+Record class_of (T : Type@{i}) := Class {
+  hom  : T -> T -> Type@{i};
   id   : forall X, hom X X;
   comp : forall X Y Z, hom Y Z -> hom X Y -> hom X Z;
   _    : forall X Y (f : hom X Y), comp f (id _) = f;
@@ -2169,7 +2208,7 @@ Record class_of T := Class {
            comp h (comp g f) = comp (comp h g) f
 }.
 
-Record type := Pack {sort; _ : class_of sort}.
+Record type := Pack {sort : Type@{i}; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
 Variables (T : Type) (cT : type).
 Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
@@ -2213,14 +2252,20 @@ Local Notation "g ∘ f" := (cat_comp g f).
 Local Notation "1" := (cat_id _).
 
 Lemma compf1 X Y (f : hom X Y) : f ∘ 1 = f.
-Proof. by move: f; rewrite /cat_comp /cat_id /hom; case: Cat.class. Qed.
+Proof.
+by move: f; unfold cat_comp, cat_id, hom; case: Cat.class.
+Qed.
 
 Lemma comp1f X Y (f : hom X Y) : 1 ∘ f = f.
-Proof. by move: f; rewrite /cat_comp /cat_id /hom; case: Cat.class. Qed.
+Proof.
+by move: f; unfold cat_comp, cat_id, hom; case: Cat.class.
+Qed.
 
 Lemma compA X Y Z W (h : hom Z W) (g : hom Y Z) (f : hom X Y) :
   h ∘ (g ∘ f) = h ∘ g ∘ f.
-Proof. by move: h g f; rewrite /cat_comp /hom; case: Cat.class. Qed.
+Proof.
+by move: h g f; unfold cat_comp, hom; case: Cat.class.
+Qed.
 
 End CatTheory.
 
@@ -2231,15 +2276,80 @@ Record functor (C D : catType) := Functor {
   fobj  :> C -> D;
   fmap  :  forall X Y : C, hom X Y -> hom (fobj X) (fobj Y);
   fmap1 :  forall (X : C), fmap (cat_id X) = 1;
-  fmapC :  forall (X Y Z : C) (g : hom Y Z) (f : hom X Y),
+  fmapD :  forall (X Y Z : C) (g : hom Y Z) (f : hom X Y),
              fmap (g ∘ f) = fmap g ∘ fmap f
 }.
+
+Arguments Functor {_ _} _ _ _ _.
 
 Definition functor_of (C D : catType) & phant (C -> D) := functor C D.
 Notation "{ 'functor' T }" := (functor_of (Phant T))
   (at level 0, format "{ 'functor'  T }") : form_scope.
 
 Identity Coercion functor_of_functor : functor_of >-> functor.
+
+Definition idF (C : catType) : {functor C -> C} :=
+  Functor id (fun _ _ => id) (fun _ => erefl) (fun _ _ _ _ _ => erefl).
+
+Arguments idF {_}.
+
+Program Definition constF (C D : catType) (X : D) : {functor C -> D} :=
+  Functor (fun _ => X) (fun _ _ _ => 1) (fun _ => erefl) _.
+
+Next Obligation. by move=> *; rewrite compf1. Qed.
+
+Program Definition compF (C D E : catType)
+    (G : {functor D -> E}) (F : {functor C -> D}) :
+    {functor C -> E} :=
+  Functor (G \o F) (fun X Y f => fmap G (fmap F f)) _ _.
+
+Next Obligation. by move=> *; rewrite /= !fmap1. Qed.
+Next Obligation. by move=> *; rewrite /= !fmapD. Qed.
+
+Section ProdCat.
+
+Variables C D E : catType.
+
+Implicit Types (X Y Z W : C * D).
+
+Local Notation prod_hom X Y := (hom X.1 Y.1 * hom X.2 Y.2)%type.
+
+Definition prod_id X : prod_hom X X := (1, 1).
+
+Definition prod_comp X Y Z (g : prod_hom Y Z) (f : prod_hom X Y) :
+  prod_hom X Z :=
+  (g.1 ∘ f.1, g.2 ∘ f.2).
+
+Lemma prod_compf1 X Y (f : prod_hom X Y) : prod_comp f (prod_id _) = f.
+Proof.
+by case: f=> [a b]; unfold prod_comp; rewrite /= !compf1.
+Qed.
+
+Lemma prod_comp1f X Y (f : prod_hom X Y) : prod_comp (prod_id _) f = f.
+Proof.
+by case: f=> [a b]; unfold prod_comp; rewrite /= !comp1f.
+Qed.
+
+Lemma prod_compA X Y Z W
+  (h : prod_hom Z W) (g : prod_hom Y Z) (f : prod_hom X Y) :
+  prod_comp h (prod_comp g f) = prod_comp (prod_comp h g) f.
+Proof.
+by unfold prod_comp; case: h g f => [??] [??] [??]; rewrite /= !compA.
+Qed.
+
+Definition prod_catMixin := CatMixin prod_compf1 prod_comp1f prod_compA.
+Canonical prod_catType := Eval hnf in CatType (C * D) prod_catMixin.
+
+Program Definition tupleF (F : {functor E -> C}) (G : {functor E -> D}) :
+    {functor E -> C * D} :=
+  Functor (fun A => (F A, G A)) (fun A B f => (fmap F f, fmap G f)) _ _.
+
+Next Obligation. by move=> /= F G A; rewrite !fmap1. Qed.
+Next Obligation. by move=> /= F G A1 A2 A3 g f; rewrite !fmapD. Qed.
+
+End ProdCat.
+
+Unset Universe Polymorphism.
 
 Module Lat.
 
@@ -2251,10 +2361,10 @@ Record mixin_of (T : poType true) := Mixin {
 }.
 
 Record class_of T := Class {
-  base : Po.class_of true T;
+  base : PPo.class_of true T;
   mixin : mixin_of (Po.Pack base)
 }.
-Local Coercion base : class_of >-> Po.class_of.
+Local Coercion base : class_of >-> PPo.class_of.
 
 Structure type := Pack {sort; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
@@ -2265,7 +2375,7 @@ Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack :=
-  fun b (bT : poType true) & phant_id (Po.class bT) b =>
+  fun b (bT : ppoType true) & phant_id (PPo.class bT) b =>
   fun m => Pack (@Class T b m).
 
 (* Inheritance *)
@@ -2273,11 +2383,12 @@ Definition eqType := @Equality.Pack cT xclass xT.
 Definition choiceType := @Choice.Pack cT xclass xT.
 Definition ordType := @Ord.Pack cT xclass xT.
 Definition poType := @Po.Pack true cT xclass.
+Definition ppoType := @PPo.Pack true cT xclass.
 
 End ClassDef.
 
 Module Import Exports.
-Coercion base : class_of >-> Po.class_of.
+Coercion base : class_of >-> PPo.class_of.
 Coercion mixin : class_of >-> mixin_of.
 Coercion sort : type >-> Sortclass.
 Coercion eqType : type >-> Equality.type.
@@ -2288,6 +2399,8 @@ Coercion ordType : type >-> Ord.type.
 Canonical ordType.
 Coercion poType : type >-> Po.type.
 Canonical poType.
+Coercion ppoType : type >-> PPo.type.
+Canonical ppoType.
 Notation latType := type.
 Notation latMixin := mixin_of.
 Notation LatMixin := Mixin.
@@ -2308,7 +2421,7 @@ Variable T : latType.
 
 Implicit Types x y z : T.
 
-Definition join := Lat.join (Lat.class T).
+Definition join : T -> T -> T := Lat.join (Lat.class T).
 
 Notation "x ∨ y" := (join x y) (at level 40, left associativity).
 
@@ -2350,6 +2463,10 @@ Qed.
 
 End LatTheory.
 
+Arguments join {_}.
+
+Notation "x ∨ y" := (join x y) (at level 40, left associativity).
+
 Section LatCat.
 
 Variable T : latType.
@@ -2363,24 +2480,22 @@ Definition lat_id x : lat_hom x x := apprxx x.
 Definition lat_comp x y z (g : lat_hom y z) (f : lat_hom x y) : lat_hom x z :=
   appr_trans f g.
 
-Definition lat_forget x : Type := {y | y ⊑ x}.
+Lemma lat_compf1 x y (f : lat_hom x y) : lat_comp f (lat_id _) = f.
+Proof. exact: eq_irrelevance. Qed.
 
-Definition lat_forget_hom x y (f : lat_hom x y) (a : lat_forget x) : lat_forget y :=
-  Sub (val a) (appr_trans (valP a) f).
+Lemma lat_comp1f x y (f : lat_hom x y) : lat_comp (lat_id _) f = f.
+Proof. exact: eq_irrelevance. Qed.
 
-Lemma lat_forget1 x a : lat_forget_hom (lat_id x) a = a.
-Proof. exact/val_inj. Qed.
+Lemma lat_compA x y z w (h : lat_hom z w) (g : lat_hom y z) (f : lat_hom x y) :
+  lat_comp h (lat_comp g f) = lat_comp (lat_comp h g) f.
+Proof. exact: eq_irrelevance. Qed.
 
-Lemma lat_forgetC x y z (g : lat_hom y z) (f : lat_hom x y) (a : lat_forget x) :
-  lat_forget_hom (lat_comp g f) a = lat_forget_hom g (lat_forget_hom f a).
-Proof. exact/val_inj. Qed.
-
-Definition lat_catMixin := CatMixin lat_forget1 lat_forgetC.
+Definition lat_catMixin := CatMixin lat_compf1 lat_comp1f lat_compA.
 Canonical lat_catType := CatType T lat_catMixin.
 
 End LatCat.
 
-Coercion dir_catType : dirType >-> catType.
+Coercion lat_catType : latType >-> catType.
 
 Lemma nat_apprP : Po.axioms_of true leq.
 Proof.
@@ -2392,1532 +2507,966 @@ Qed.
 
 Definition nat_poMixin := PoMixin nat_apprP.
 Canonical nat_poType := Eval hnf in PoType nat nat_poMixin.
+Definition nat_ppoMixin := PPoMixin leq0n.
+Canonical nat_ppoType := Eval hnf in PPoType nat nat_ppoMixin.
 
-Lemma nat_joinP (x y : nat) : (x <= maxn x y) && (y <= maxn x y).
-Proof. by rewrite leq_maxr leq_maxl. Qed.
+Definition nat_latMixin := LatMixin (fun x y z => geq_max z x y).
+Canonical nat_latType := Eval hnf in LatType nat nat_latMixin.
+Canonical nat_catType :=
+  Eval hnf in CatType nat (lat_catMixin [latType of nat]).
 
-Definition nat_dirMixin := DirMixin nat_joinP.
-Canonical nat_dirType := Eval hnf in DirType nat nat_dirMixin.
-Canonical nat_catType := Eval hnf in [catType of [dirType of nat]].
-
-Section ProjDirType.
+Section ProjLatType.
 
 Variable (T : pdomType true).
 
-Implicit Types X Y : {proj T}.
+Implicit Types X Y Z : {proj T}.
 
-Lemma proj_joinP X Y : (X ⊑ projU X Y) && (Y ⊑ projU X Y).
-Proof. apply/andP; split; [exact: projUl|exact: projUr]. Qed.
+Lemma proj_joinP X Y Z : projU X Y ⊑ Z = (X ⊑ Z) && (Y ⊑ Z).
+Proof.
+apply/(sameP idP)/(iffP idP).
+- case/andP=> XZ YZ.
+  rewrite apprE /= /proj_appr -(eqP (valP Z)).
+  by apply: lub_closureS; rewrite fsubUset; apply/andP; split.
+- move=> XYZ; apply/andP; split; apply: appr_trans XYZ.
+  + exact: (fsubset_trans (fsubsetUl X Y) (lub_closure_ext _)).
+  + exact: (fsubset_trans (fsubsetUr X Y) (lub_closure_ext _)).
+Qed.
 
-Definition proj_dirMixin := DirMixin proj_joinP.
-Canonical proj_dirType := Eval hnf in DirType (proj T) proj_dirMixin.
-Canonical proj_of_dirType := Eval hnf in [dirType of {proj T}].
-Canonical proj_catType := Eval hnf in [catType of [dirType of proj T]].
-Canonical proj_of_catType := Eval hnf in [catType of [dirType of {proj T}]].
+Definition proj_latMixin := LatMixin proj_joinP.
+Canonical proj_latType := Eval hnf in LatType (proj T) proj_latMixin.
+Canonical proj_of_latType := Eval hnf in [latType of {proj T}].
+Canonical proj_catType :=
+  CatType (proj T) (lat_catMixin [latType of proj T]).
+Canonical proj_of_catType := Eval hnf in [catType of {proj T}].
+Definition proj_domMixin := @DomMixin _ _ (fun X Y => Coh (projU X Y)) proj_joinP.
+Canonical proj_domType := Eval hnf in DomType (proj T) proj_domMixin.
+Canonical proj_of_domType := Eval hnf in [domType of {proj T}].
+Canonical proj_pdomType := Eval hnf in PDomType (proj T).
+Canonical proj_of_pdomType := Eval hnf in PDomType {proj T}.
 
-End ProjDirType.
+End ProjLatType.
 
-Section DomCatType.
+Section ProjFin.
 
-Implicit Types T S R : domType true.
+Variable T : finPDomType true.
 
-Record dom_hom T S := DomHom {
-  dom_hom_val :> T -> S;
-  dom_hom_inj :  injective dom_hom_val;
-  dom_hom_lub :  lub_preserving dom_hom_val
+(* FIXME: Move to extructures *)
+
+Definition fset_countMixin :=
+  sub_countMixin (fset_subType T).
+Canonical fset_countType :=
+  Eval hnf in CountType (FSet.fset_type T) fset_countMixin.
+Canonical fset_of_countType :=
+  Eval hnf in [countType of {fset T}].
+
+Definition fset_enum := val (powerset (fset (enum T))).
+Lemma fset_enumP : fset_enum =i {: {fset T}}.
+Proof.
+move=> /= X; rewrite /fset_enum powersetE.
+by apply/fsubsetP=> /= x; rewrite in_fset mem_enum.
+Qed.
+Definition fset_finMixin :=
+  UniqFinMixin (uniq_fset (powerset (fset (enum T)))) fset_enumP.
+Canonical fset_finType :=
+  Eval hnf in FinType (FSet.fset_type T) fset_finMixin.
+Canonical fset_of_finType :=
+  Eval hnf in [finType of {fset T}].
+
+Definition proj_countMixin := [countMixin of proj T by <:].
+Canonical proj_countType := Eval hnf in CountType (proj T) proj_countMixin.
+Canonical proj_of_countType := Eval hnf in [countType of {proj T}].
+Canonical proj_subCountType := Eval hnf in [subCountType of proj T].
+Canonical proj_of_subCountType := Eval hnf in [subCountType of {proj T}].
+Definition proj_finMixin := [finMixin of proj T by <:].
+Canonical proj_finType := Eval hnf in FinType (proj T) proj_finMixin.
+Canonical proj_of_finType := Eval hnf in [finType of {proj T}].
+Canonical proj_finDomType := Eval hnf in FinDomType (proj T).
+Canonical proj_of_finDomType := Eval hnf in FinDomType {proj T}.
+Canonical proj_finPDomType := Eval hnf in FinPDomType (proj T).
+Canonical proj_of_finPDomType := Eval hnf in FinPDomType {proj T}.
+
+End ProjFin.
+
+Section FinDomCatType.
+
+Implicit Types T S R : finDomType true.
+
+Definition lub_preservingb
+    (T : finDomType true) (S : domType true) (f : T -> S) :=
+  [forall x, forall y, f x ⊔ f y ==
+    if x ⊔ y is Coh z then Coh (f z) else Incoh].
+
+Lemma lub_preservingP T S f :
+  reflect (lub_preserving f) (@lub_preservingb T S f).
+Proof.
+apply/(iffP forallP).
+- by move=> H x y; move/(_ x)/forallP/(_ y)/eqP: H.
+- move=> H x; apply/forallP=> y; apply/eqP.
+  exact: H.
+Qed.
+
+Section TypeDef.
+
+Variables T S : finDomType true.
+
+Record finDom_hom := FinDomHom {
+  dom_hom_val :> {mono T -> S};
+  _           :  injectiveb dom_hom_val && lub_preservingb dom_hom_val
 }.
 
-Arguments DomHom : clear implicits.
+Canonical finDom_hom_subType := Eval hnf in [subType for dom_hom_val].
+Definition finDom_eqMixin := [eqMixin of finDom_hom by <:].
+Canonical finDom_eqType := Eval hnf in EqType finDom_hom finDom_eqMixin.
 
-Definition dom_id T := DomHom T T id (@inj_id T) (@lub_preserving_id T).
+Lemma finDom_hom_inj (f : finDom_hom) : injective f.
+Proof. by apply/injectiveP; case/andP: (valP f). Qed.
 
-Definition dom_comp T S R (g : dom_hom S R) (f : dom_hom T S) :=
-  DomHom T R (g \o f)
-         (inj_comp (@dom_hom_inj _ _ g) (@dom_hom_inj _ _ f))
-         (lub_preserving_comp (dom_hom_lub f) (dom_hom_lub g)).
+Lemma finDom_hom_lub (f : finDom_hom) : lub_preserving f.
+Proof. by apply/lub_preservingP; case/andP: (valP f). Qed.
 
-Lemma dom_forget1 T (x : T) : dom_id T x = x.
-Proof. by []. Qed.
+Lemma finDom_hom_iso (f : finDom_hom) : isotone f.
+Proof. apply: inj_iso; [exact: finDom_hom_inj|exact: finDom_hom_lub]. Qed.
 
-Lemma dom_forgetC T S R (g : dom_hom S R) (f : dom_hom T S) (x : T) :
-  dom_comp g f x = g (f x).
-Proof. by []. Qed.
+End TypeDef.
 
-Definition dom_catMixin := CatMixin dom_forget1 dom_forgetC.
-Canonical dom_catType := Eval hnf in CatType (domType true) dom_catMixin.
+Lemma finDom_id_proof T :
+  injectiveb (@mono_id T) && lub_preservingb (@mono_id T).
+Proof.
+apply/andP; split.
+- by apply/injectiveP=> ??; rewrite !mkmonoE.
+- apply/lub_preservingP; apply: eq_lub_preserving (@lub_preserving_id T) _.
+  by move=> ?; rewrite mkmonoE.
+Qed.
 
-End DomCatType.
+Definition finDom_id T : finDom_hom T T :=
+  FinDomHom (finDom_id_proof T).
 
-Section DomColim.
+Lemma finDom_comp_proof T S R (g : finDom_hom S R) (f : finDom_hom T S) :
+  injectiveb (mono_comp g f) && lub_preservingb (mono_comp g f).
+Proof.
+apply/andP; split.
+- apply/injectiveP.
+  apply: eq_inj _ (fsym (mkmonoE _)); apply: inj_comp; exact: finDom_hom_inj.
+- apply/lub_preservingP.
+  apply: eq_lub_preserving _ (fsym (mkmonoE _)).
+  apply: lub_preserving_comp; exact: finDom_hom_lub.
+Qed.
 
-Variables (I : dirType) (F : {functor I -> domType true}).
+Definition finDom_comp T S R (g : finDom_hom S R) (f : finDom_hom T S) :=
+  FinDomHom (finDom_comp_proof g f).
 
-Implicit Types x y z : {i & F i}.
+Lemma finDom_compf1 T S (f : finDom_hom T S) :
+  finDom_comp f (finDom_id T) = f.
+Proof.
+by apply/val_inj/val_inj/ffunP=> x; rewrite /= ffunE /= ffunE.
+Qed.
 
-Definition dom_colim_appr x y :=
+Lemma finDom_comp1f T S (f : finDom_hom T S) :
+  finDom_comp (finDom_id S) f = f.
+Proof.
+by apply/val_inj/val_inj/ffunP=> x; rewrite /= ffunE /= ffunE.
+Qed.
+
+Lemma finDom_compA T S R U
+  (h : finDom_hom R U) (g : finDom_hom S R) (f : finDom_hom T S) :
+  finDom_comp h (finDom_comp g f) = finDom_comp (finDom_comp h g) f.
+Proof.
+by apply/val_inj/val_inj/ffunP=> x; do ![rewrite /= ffunE].
+Qed.
+
+Definition finDom_catMixin := CatMixin finDom_compf1 finDom_comp1f finDom_compA.
+Canonical finDom_catType := CatType (finDomType true) finDom_catMixin.
+
+Lemma finDom_idE T (x : T) : cat_id T x = x.
+Proof. by rewrite mkmonoE. Qed.
+
+Lemma finDom_compE T S R (g : hom S R) (f : hom T S) x : (g ∘ f) x = g (f x).
+Proof. by rewrite mkmonoE. Qed.
+
+End FinDomCatType.
+
+Section FinPDomCatType.
+
+Implicit Types T S R : finPDomType true.
+
+Section TypeDef.
+
+Variables T S : finPDomType true.
+
+Record finPDom_hom := FinPDomHom {
+  pdom_hom_val :> finDom_hom T S;
+  _            :  pdom_hom_val ⊥ == ⊥
+}.
+
+Canonical finPDom_hom_subType := Eval hnf in [subType for pdom_hom_val].
+Definition finPDom_eqMixin := [eqMixin of finPDom_hom by <:].
+Canonical finPDom_eqType := Eval hnf in EqType finPDom_hom finPDom_eqMixin.
+
+Lemma finPDom_homB (f : finPDom_hom) : f ⊥ = ⊥.
+Proof. exact/eqP/(valP f). Qed.
+
+End TypeDef.
+
+Lemma finPDom_id_proof T : finDom_id T ⊥ == ⊥.
+Proof. by apply/eqP; rewrite mkmonoE. Qed.
+
+Definition finPDom_id T : finPDom_hom T T :=
+  FinPDomHom (finPDom_id_proof T).
+
+Lemma finPDom_comp_proof T S R (g : finPDom_hom S R) (f : finPDom_hom T S) :
+  finDom_comp g f ⊥ == ⊥.
+Proof. by apply/eqP; rewrite mkmonoE /= !finPDom_homB. Qed.
+
+Definition finPDom_comp T S R (g : finPDom_hom S R) (f : finPDom_hom T S) :=
+  FinPDomHom (finPDom_comp_proof g f).
+
+Lemma finPDom_compf1 T S (f : finPDom_hom T S) :
+  finPDom_comp f (finPDom_id T) = f.
+Proof.
+by apply/val_inj/val_inj/val_inj/ffunP=> x; rewrite /= ffunE /= ffunE.
+Qed.
+
+Lemma finPDom_comp1f T S (f : finPDom_hom T S) :
+  finPDom_comp (finPDom_id S) f = f.
+Proof.
+by apply/val_inj/val_inj/val_inj/ffunP=> x; rewrite /= ffunE /= ffunE.
+Qed.
+
+Lemma finPDom_compA T S R U
+  (h : finPDom_hom R U) (g : finPDom_hom S R) (f : finPDom_hom T S) :
+  finPDom_comp h (finPDom_comp g f) = finPDom_comp (finPDom_comp h g) f.
+Proof.
+by apply/val_inj/val_inj/val_inj/ffunP=> x; do ![rewrite /= ffunE].
+Qed.
+
+Definition finPDom_catMixin := CatMixin finPDom_compf1 finPDom_comp1f finPDom_compA.
+Canonical finPDom_catType := CatType (finPDomType true) finPDom_catMixin.
+
+Lemma finPDom_idE T (x : T) : cat_id T x = x.
+Proof. by rewrite mkmonoE. Qed.
+
+Lemma finPDom_compE T S R (g : hom S R) (f : hom T S) x : (g ∘ f) x = g (f x).
+Proof. by rewrite mkmonoE. Qed.
+
+Program Definition finPDom_bot T : finPDom_hom unit_finPDomType T :=
+  @FinPDomHom _ _ (@FinDomHom _ _ ⊥ _) _.
+
+Next Obligation.
+move=> T; apply/andP; split.
+- by apply/injectiveP; case=> [] [].
+- by apply/lub_preservingP; case=> [] []; rewrite !lubxx.
+Qed.
+
+Next Obligation. by move=> T /=; rewrite ffunE. Qed.
+
+End FinPDomCatType.
+
+Arguments finPDom_bot {_}.
+
+Program Definition forgetF : {functor finPDomType true -> finDomType true} :=
+  Functor (fun T => T) (fun T S f => f)
+          (fun T => erefl) (fun T S R f g => erefl).
+
+Program Definition prodF :
+    {functor finPDomType true * finPDomType true -> finPDomType true} :=
+  Functor (fun X => [finPDomType of X.1 * X.2])
+          (fun (X Y : finPDomType true * finPDomType true) f =>
+             Sub (Sub (mkmono (fun x : X.1 * X.2 => (f.1 x.1, f.2 x.2) : [finPDomType of Y.1 * Y.2]) _) _) _)
+          _ _.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2] [x1 x2] [y1 y2] /andP [xy1 xy2].
+by apply/andP; split; apply: monoP.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2]; apply/andP; split.
+- apply/injectiveP; case=> [x1 x2] [y1 y2]; rewrite !ffunE /=.
+  by case=> /finDom_hom_inj -> /finDom_hom_inj ->.
+- apply/lub_preservingP; case=> [x1 x2] [y1 y2]; rewrite !ffunE /=.
+  rewrite /lub /= /prod_lub /= !finDom_hom_lub.
+  by case: (x1 ⊔ y1) (x2 ⊔ y2)=> [xy1|] [xy2|] //=; rewrite ffunE.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2]; apply/eqP; rewrite ffunE.
+by rewrite (eqP (valP f1)) (eqP (valP f2)).
+Qed.
+
+Next Obligation.
+move=> [T1 T2]; apply/val_inj/val_inj/val_inj/ffunP; case=> [x1 x2].
+by rewrite /= !ffunE.
+Qed.
+
+Next Obligation.
+case=> [T1 T2] [S1 S2] [R1 R2] [/= g1 g2] [/= f1 f2].
+apply/val_inj/val_inj/val_inj/ffunP; case=> [x1 x2] /=.
+by rewrite /= !ffunE /= !ffunE.
+Qed.
+
+Definition sumF_map
+    (X Y : finDomType true * finDomType true)
+    (f : hom X.1 Y.1 * hom X.2 Y.2)
+    (x : [finDomType of X.1 + X.2]) : [finDomType of Y.1 + Y.2] :=
+  match x with
+  | inl x => inl (f.1 x)
+  | inr x => inr (f.2 x)
+  end.
+
+Program Definition sumF :
+    {functor finDomType true * finDomType true -> finDomType true} :=
+  Functor (fun X => sum_finDomType X.1 X.2)
+          (fun X Y f => Sub (mkmono (sumF_map f)  _) _)
+          _ _.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2] [] x [] y //.
+- exact: (monoP f1).
+- exact: (monoP f2).
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2]; apply/andP; split.
+- by apply/injectiveP; case=> [] x [] y; rewrite !ffunE //=;
+  case=> /finDom_hom_inj ->.
+- by apply/lub_preservingP; case=> [] x [] y; rewrite !ffunE //=;
+  rewrite /lub /= finDom_hom_lub; case: (x ⊔ y)=> [xy|] //=;
+  rewrite !ffunE.
+Qed.
+
+Next Obligation.
+by move=> [T1 T2]; apply/val_inj/val_inj/ffunP; case=> /= x;
+rewrite !ffunE /= !ffunE.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [R1 R2] [/= g1 g2] [/= f1 f2].
+by apply/val_inj/val_inj/ffunP; case=> [] x /=; rewrite !ffunE /= !ffunE.
+Qed.
+
+Program Definition optionF :
+    {functor finDomType true -> finPDomType true} :=
+  Functor option_finPDomType
+          (fun T S f => Sub (Sub (mkmono (omap f) _) _) _)
+          _ _.
+
+Next Obligation.
+move=> T S f [x|] [y|] //=; exact: (monoP f).
+Qed.
+
+Next Obligation.
+move=> T S f; apply/andP; split.
+- apply/injectiveP; case=> [x|] [y|]; rewrite !ffunE //=.
+  by case=> /finDom_hom_inj ->.
+- apply/lub_preservingP; case=> [x|] [y|]; rewrite !ffunE //= ?ffunE //=.
+  rewrite /lub /= finDom_hom_lub; case: (x ⊔ y)=> [xy|] //=.
+  by rewrite ffunE.
+Qed.
+
+Next Obligation. by move=> T S f; rewrite /= ffunE. Qed.
+
+Next Obligation.
+by move=> T; apply/val_inj/val_inj/val_inj/ffunP; case=> [x|] /=;
+rewrite !ffunE /= ?ffunE.
+Qed.
+
+Next Obligation.
+by move=> T S R g f; apply/val_inj/val_inj/val_inj/ffunP; case=> [x|];
+rewrite !ffunE /= !ffunE.
+Qed.
+
+Program Definition monoF :
+    {functor finPDomType true * finPDomType true -> finPDomType true} :=
+  Functor (fun X => mono_finPDomType X.1 X.2)
+          (fun X Y f =>
+             Sub (Sub (mkmono (fun g => mono_comp f.2 (mono_comp g (mkmono (retract f.1) _))) _)
+                      _) _)
+          _ _.
+
+Next Obligation.
+by move=> ????; apply: retract_mono; [exact/finPDom_homB|exact/finDom_hom_lub].
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2] /= g1 g2 /fapprP g12.
+apply/fapprP=> x; rewrite /= !ffunE /= !ffunE /= !ffunE /=.
+by apply/(monoP f2)/g12.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2] /=; apply/andP; split.
+- apply/injectiveP=> g1 g2; rewrite !ffunE /=.
+  move/(congr1 val)/ffunP=> g12; apply/val_inj/ffunP=> x.
+  move/(_ (f1 x)): g12; rewrite /= !ffunE /= !ffunE /= !ffunE /=.
+  move/finDom_hom_inj; rewrite retractK //.
+  + exact: finDom_hom_lub.
+  + exact: finDom_hom_inj.
+- apply/lub_preservingP=> g1 g2; rewrite /= !ffunE.
+  case e12: (g1 ⊔ g2)=> [g12|] /=.
+  + apply/mono_lub_Coh=> x; rewrite /= !ffunE /= !ffunE /= !ffunE /=.
+    by rewrite finDom_hom_lub; move/mono_lub_Coh: e12=> ->.
+  + move/mono_lub_Incoh: e12=> [x xE].
+    apply/mono_lub_Incoh; exists (f1 x).
+    do ![rewrite /= !ffunE /=]; rewrite finDom_hom_lub !retractK ?xE //.
+    * exact: finDom_hom_lub.
+    * exact: finDom_hom_inj.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [/= f1 f2]; apply/eqP/val_inj/ffunP=> x.
+by do ![rewrite /= !ffunE /=]; rewrite finPDom_homB.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] /=; apply/val_inj/val_inj/val_inj/ffunP=> f /=.
+apply/val_inj/ffunP=> x; do ![rewrite /= !ffunE /=].
+rewrite {1}(_ : x = [ffun x => x] x); try by rewrite ffunE.
+rewrite -{1}[x]/(proj_elt (Sub x (in_projT x))) retractK //.
+- by move=> ??; rewrite !ffunE /=; case: lub=> //= ?; rewrite ffunE.
+- by move=> ??; rewrite !ffunE.
+Qed.
+
+Next Obligation.
+move=> [T1 T2] [S1 S2] [R1 R2] [/= g1 g2] [/= f1 f2].
+apply/val_inj/val_inj/val_inj/ffunP=> h /=.
+do ![rewrite /= !ffunE /=]; apply/val_inj/ffunP=> x /=.
+do ![rewrite /= !ffunE /=]; congr (g2 (f2 (h _))).
+rewrite (eq_retract (ffunE _)) retract_comp //;
+do 1?[apply/finPDom_homB|apply/finDom_hom_inj|apply/finDom_hom_lub].
+Qed.
+
+Program Definition projF :
+  {functor finPDomType true -> finPDomType true} :=
+  Functor proj_finPDomType
+          (fun X Y f =>
+             Sub (Sub (mkmono (mapp f) _) _) _)
+          _ _.
+
+Next Obligation.
+by move=> T S f X Y XY; apply/lub_closureS/imfsetS.
+Qed.
+
+Next Obligation.
+move=> T S f /=; apply/andP; split.
+  apply/injectiveP=> X Y; rewrite !ffunE; move=> /(congr1 val).
+  do 2![rewrite val_mapp; do 1?[apply/finPDom_homB|apply/finDom_hom_lub]].
+  by move=> /(@imfset_inj _ _ _ (@finDom_hom_inj _ _ f)) /val_inj.
+apply/lub_preservingP=> X Y; rewrite !ffunE /lub /= ffunE /=; congr Coh.
+have mappP_f := @mappP _ _ _ _ _ (finPDom_homB f) (@finDom_hom_lub _ _ f).
+have mem_mapp_f :=
+  @mem_mapp _ _ _ _ _ (@finDom_hom_inj _ _ f) (finPDom_homB f) (@finDom_hom_lub _ _ f).
+apply/eq_proj=> x; apply/(sameP idP)/(iffP idP).
+- case/mappP_f=> {x} x /projUP [x1 [x2 [x1P x2P xE]]] ->.
+  apply/projUP; exists (f x1), (f x2).
+  by split; rewrite ?mem_mapp_f ?finDom_hom_lub ?xE.
+- case/projUP=> [x1 [x2 [x1P x2P]]].
+  case/mappP_f: x1P=> {x1} x1 x1P ->; case/mappP_f: x2P=> {x2} x2 x2P ->.
+  rewrite finDom_hom_lub; case xE: (x1 ⊔ x2)=> {x} [x|] // [<-].
+  by rewrite mem_mapp_f; apply/projUP; exists x1, x2; split.
+Qed.
+
+Next Obligation.
+move=> T S f /=; apply/eqP; rewrite ffunE; apply/val_inj; rewrite /=.
+by rewrite lub_closure0 imfset1 finPDom_homB -[RHS]lub_closure_idem lub_closure0.
+Qed.
+
+Next Obligation.
+move=> T /=; apply/val_inj/val_inj/val_inj/ffunP=> X /=.
+by rewrite !ffunE (eq_mapp (ffunE (fun x : T => x))) mapp_id.
+Qed.
+
+Next Obligation.
+move=> T S R g f /=; apply/val_inj/val_inj/val_inj/ffunP=> X /=.
+do ![rewrite /= !ffunE /=]; rewrite (eq_mapp (ffunE (g \o f))).
+by apply: mapp_comp; do 1?[exact/finDom_hom_lub|exact/finPDom_homB].
+Qed.
+
+Section FinPDomColim.
+
+Variables (I : latType) (F : {functor I -> finPDomType true}).
+
+Record precolim := PreColim_ { tagged_of_precolim :> {i & F i} }.
+
+Definition PreColim (i : I) (x : F i) := PreColim_ (Tagged (fun i => F i) x).
+Arguments PreColim : clear implicits.
+
+Canonical precolim_subType :=
+  Eval hnf in [newType for tagged_of_precolim].
+Canonical precolim_eqType :=
+  Eval hnf in EqType precolim [eqMixin of precolim by <:].
+Canonical precolim_choiceType :=
+  Eval hnf in ChoiceType precolim [choiceMixin of precolim by <:].
+Canonical precolim_ordType :=
+  Eval hnf in OrdType precolim [ordMixin of precolim by <:].
+
+Implicit Types x y z : precolim.
+
+Definition precolim_appr x y :=
   fmap F (join_apprl (tag x) (tag y)) (tagged x)
   ⊑ fmap F (join_apprr (tag x) (tag y)) (tagged y).
 
-Lemma dom_colim_apprP : Po.axioms_of false dom_colim_appr.
+Lemma precolim_apprE x y i (ex : tag x ⊑ i) (ey : tag y ⊑ i) :
+  precolim_appr x y =
+  fmap F ex (tagged x) ⊑ fmap F ey (tagged y).
 Proof.
-rewrite /dom_colim_appr; split=> //.
-- move=> [i x] /=.
-  by rewrite (eq_irrelevance (join_apprl i i) (join_apprr i i)) apprxx.
-- move=> [j y] [i x] [k z] /=.
-
-
-Inductive dom_pre_colim := DomPreColim (i : I) of F i.
-
-Definition tagged_of_dom_pre_colim (x : dom_pre_colim) : {i & F i} :=
-  let: DomPreColim i x := x in Tagged (fun i => F i) x.
-
-Definition dom_pre_colim_of_tagged (x : {i & F i}) : dom_pre_colim :=
-  DomPreColim (tagged x).
-
-Lemma tagged_of_dom_pre_colimK :
-  cancel tagged_of_dom_pre_colim dom_pre_colim_of_tagged.
-Proof. by case. Qed.
-
-Definition dom_pre_colim_eqMixin := CanEqMixin tagged_of_dom_pre_colimK.
-Canonical dom_pre_colim_eqType := EqType dom_pre_colim dom_pre_colim_eqMixin.
-Definition dom_pre_colim_choiceMixin := CanChoiceMixin tagged_of_dom_pre_colimK.
-Canonical dom_pre_colim_choiceType :=
-  Eval hnf in ChoiceType dom_pre_colim
-
-
-Canonical dom_pre_colim_subType := [newType for
-
-
-Section Saturated.
-
-Variables (T S : pdomType true).
-
-Variant sat := Sat (X : {proj T}) of {mono X -> S}.
-Definition sat_of & phant (T -> S) := sat.
-Identity Coercion sat_of_sat : sat_of >-> sat.
-
-lia. Lia.
-Canonical sat_subType := [subType for sat_val].
-Definition sat_eqMixin := [eqMixin of sat by <:].
-Canonical sat_eqType := Eval hnf in EqType sat sat_eqMixin.
-Definition sat_choiceMixin := [choiceMixin of sat by <:].
-Canonical sat_choiceType := Eval hnf in ChoiceType sat sat_choiceMixin.
-Definition sat_ordMixin := [ordMixin of sat by <:].
-Canonical sat_ordType := Eval hnf in OrdType sat sat_ordMixin.
-
-Notation "{ 'sat' T }" := (sat_of (Phant T))
-  (at level 0, format "{ 'sat'  T }").
-
-Canonical sat_of_eqType := [eqType of {sat T -> S}].
-Canonical sat_of_choiceType := [choiceType of {sat T -> S}].
-Canonical sat_of_ordType := [ordType of {sat T -> S}].
-
-Implicit Types (f g h : {sat T -> S}).
-
-Definition ssupp f := tag (val f).
-
-Definition fmap_of_sat f : {ffun ssupp f -> S} :=
-  tagged (val f).
-
-Definition sapp (f : sat) : T -> S :=
-  fmap_of_sat f \o retract id (ssupp f).
-
-Local Coercion sapp : sat >-> Funclass.
-
-Lemma sat_mono f : monotone f.
-Proof.
-apply: mono_comp; last exact/monotonebP/(valP f).
-apply: retract_mono=> //; exact: lub_preserving_id.
+rewrite /precolim_appr.
+have exy : tag x ∨ tag y ⊑ i by rewrite appr_join ex ey.
+rewrite -(finDom_hom_iso (fmap F exy)) -!finPDom_compE -!fmapD.
+congr (fmap F _ (tagged x) ⊑ fmap F _ (tagged y)); exact: eq_irrelevance.
 Qed.
 
-Arguments Sat X f H : clear implicits.
-
-Program Definition sat0 : {sat T -> S} := Sat ⊥ ⊥ _.
-Next Obligation.
-apply/forallP=> /= x; apply/forallP=> y; apply/implyP=> xy.
-by rewrite fbotE botP.
-Qed.
-
-Definition mksat (f : T -> S) (X : {proj T}) : {sat T -> S} :=
-  if boolP (monotoneb
-  if insub (Sat
-Tagged (fun Y : {proj T} => {ffun Y -> S}) (mkffun (f \o @proj_elt _ X) projT)) is Some g then g else sat0.
-
-Lemma in_saturated_mkffun (f : T -> S) (X : {proj T}) :
-  {in X &, monotone f} -> saturated (mkffun f X).
+Lemma precolim_apprP : Po.axioms_of false precolim_appr.
 Proof.
-move=> f_mono; apply/andP; split.
-  apply/monotonebP=> y z y_in z_in y_z; rewrite !mkffunE.
-  move/(fsubsetP (fsupp_ffun_of_fmap_sub _)): y_in.
-  move/(fsubsetP (fsupp_ffun_of_fmap_sub _)): z_in.
-  rewrite !domm_mkfmapf !in_fset => z_X y_X; rewrite z_X y_X; exact: f_mono.
-rewrite eqEfsubset lub_closure_ext andbT.
-apply/fsubsetP=> x /lub_closureP [Y sub lubn_Y].
-rewrite fsupp_ffun_of_fmap in_fset mem_filter mem_domm mkfmapfE.
-have x_X: x \in val X.
-  rewrite -(eqP (valP X)); apply/lub_closureP; exists Y=> //.
-  by rewrite (fsubset_trans sub) ?(fsubset_trans (fsupp_ffun_of_fmap_sub _));
-  rewrite ?domm_mkfmapf ?fsvalK ?fsubsetxx.
-rewrite x_X; have /fset0Pn [y y_Y] : Y != fset0.
-  by apply/eqP=> e; rewrite e lubn0 in lubn_Y.
-suffices: f x != ⊥ by rewrite andbT.
-have y_X: y \in X.
-  move: (fsubsetP sub _ y_Y); apply: contraTT=> y_X; apply/fsuppPn.
-  by rewrite mkffunE (negbTE y_X).
-have /(f_mono _ _ y_X x_X) y_x: y ⊑ x.
-  by apply/allP: (y) y_Y; rewrite -lubn_appr lubn_Y apprxx.
-apply: contraTN y_x => /eqP ->.
-move/(fsubsetP sub _): y_Y; rewrite fsupp_ffun_of_fmap in_fset.
-rewrite mem_filter mem_domm mkfmapfE; case: ifP; rewrite ?andbF //.
-rewrite andbT => _; apply: contraNN=> f_y; apply/eqP/appr_anti.
-rewrite apprE /= f_y; exact: botP.
+split=> [x|y x z|//].
+  by rewrite (precolim_apprE (apprxx (tag x)) (apprxx (tag x))) apprxx.
+have xi : tag x ⊑ tag x ∨ tag y ∨ tag z.
+  by rewrite -joinA join_apprl.
+have yi : tag y ⊑ tag x ∨ tag y ∨ tag z.
+  by rewrite (appr_trans (join_apprr (tag x) (tag y))) // join_apprl.
+have zi : tag z ⊑ tag x ∨ tag y ∨ tag z by rewrite join_apprr.
+rewrite (precolim_apprE xi yi) (precolim_apprE yi zi) (precolim_apprE xi zi).
+exact: appr_trans.
 Qed.
 
-Lemma saturated_mkffun (f : T -> S) (X : {proj T}) :
-  monotone f -> saturated (mkffun f X).
+Definition precolim_poMixin := PoMixin precolim_apprP.
+Canonical precolim_poType :=
+  Eval hnf in PoType precolim precolim_poMixin.
+
+Lemma precolim_botP x : PreColim ⊥ ⊥ ⊑ x.
 Proof.
-move=> f_mono; apply: in_saturated_mkffun=> ????; exact: f_mono.
+rewrite /appr /=.
+rewrite (@precolim_apprE (PreColim ⊥ ⊥) x _ (botP (tag x)) (apprxx (tag x))).
+by rewrite (eqP (valP (fmap F (botP (tag x))))) botP.
 Qed.
 
-Definition mksat (f : T -> S) (X : {proj T}) : {sat T -> S} :=
-  if insub (mkffun f X) is Some g then g else sat0.
+Definition precolim_ppoMixin := PPoMixin precolim_botP.
+Canonical precolim_ppoType := Eval hnf in PPoType precolim precolim_ppoMixin.
 
-Lemma in_mksatE (f : T -> S) (X : {proj T}) x :
-  {in X &, monotone f} ->
-  mksat f X x = if project X x is Some x' then f x' else ⊥.
+Definition precolim_lub x y : coh precolim :=
+  let xx := fmap F (join_apprl (tag x) (tag y)) (tagged x) in
+  let yy := fmap F (join_apprr (tag x) (tag y)) (tagged y) in
+  if xx ⊔ yy is Coh zz then Coh (PreColim _ zz) else Incoh.
+
+Lemma precolim_lubE x y i (xi : tag x ⊑ i) (yi : tag y ⊑ i) :
+  if fmap F xi (tagged x) ⊔ fmap F yi (tagged y) is Coh zz then
+    exists z (zi : tag z ⊑ i),
+      precolim_lub x y = Coh z /\
+      zz = fmap F zi (tagged z)
+  else precolim_lub x y = Incoh.
 Proof.
-rewrite /sapp /mksat => f_mono.
-have f_sat := in_saturated_mkffun f_mono.
-rewrite insubT /=.
-have X'P : forall x', x' \in ssupp (Sat f_sat) = (x' \in X) && (f x' != ⊥).
-  move=> x'; rewrite /ssupp inE /= fsupp_ffun_of_fmap in_fset.
-  by rewrite mem_filter !mem_domm mkfmapfE; case: (x' \in X);
-  rewrite // andbT.
-have sub: fsubset (ssupp (Sat f_sat)) X.
-  by apply/fsubsetP=> x'; rewrite X'P; case/andP.
-rewrite -(projectS _ sub); case X_x: (project X x)=> [x'|] //=.
-have [f_x'|f_x'] := altP (f x' =P ⊥).
-  suffices ->: project (ssupp (Sat f_sat)) x' = None by rewrite f_x'.
-  apply/appr_anti; rewrite botP andbT.
-  apply/projectPG=> y; rewrite X'P; case/andP=> y_X f_y y_x'.
-  have x'_X: x' \in X by exact: project_lub_closure X_x.
-  move: (f_mono _ _ y_X x'_X y_x'); rewrite f_x' => e.
-  suffices e': f y = ⊥ by rewrite e' eqxx in f_y.
-  by apply/appr_anti; rewrite e botP.
-rewrite projectK ?X'P ?f_x' ?(project_lub_closure X_x) //.
-by rewrite mkffunE ?(project_lub_closure X_x).
+rewrite /precolim_lub.
+have zi : tag x ∨ tag y ⊑ i by rewrite appr_join xi yi.
+rewrite (eq_irrelevance xi (appr_trans (join_apprl _ _) zi)).
+rewrite (eq_irrelevance yi (appr_trans (join_apprr _ _) zi)).
+rewrite !fmapD !finDom_compE finDom_hom_lub.
+by case: lub=> // zz; exists (PreColim _ zz), zi; split.
 Qed.
 
-Lemma mksatE (f : T -> S) (X : {proj T}) x :
-  monotone f ->
-  mksat f X x = if project X x is Some x' then f x' else ⊥.
-Proof. move=> mono_f; apply: in_mksatE=> ????; exact: mono_f. Qed.
-
-Lemma mksatK f (X : {proj T}) : fsubset (ssupp f) X -> f =1 mksat f X.
+Lemma precolim_lub_appr x y z :
+  precolim_lub x y ⊑ Coh z = (x ⊑ z) && (y ⊑ z).
 Proof.
-move=> sub x; rewrite mksatE /sapp; try exact: sat_mono.
-by rewrite -(projectS x sub); case: (project _ x).
+have xi : tag x ⊑ tag x ∨ tag y ∨ tag z.
+  by rewrite -joinA join_apprl.
+have yi : tag y ⊑ tag x ∨ tag y ∨ tag z.
+  by rewrite (appr_trans (join_apprr (tag x) (tag y))) // join_apprl.
+have zi : tag z ⊑ tag x ∨ tag y ∨ tag z by rewrite join_apprr.
+rewrite [x ⊑ z](precolim_apprE xi zi) [y ⊑ z](precolim_apprE yi zi).
+rewrite -lub_appr; move: (precolim_lubE xi yi); case: lub=> [|-> //].
+move=> _ [xy [xyi [-> ->]]].
+by rewrite [Coh xy ⊑ Coh z](precolim_apprE xyi zi).
 Qed.
 
-Lemma val_mksat (f : T -> S) (X : {proj T}) :
-  monotone f -> val (mksat f X) = mkffun f X.
+Definition precolim_domMixin := DomMixin precolim_lub_appr.
+Canonical precolim_domType :=
+  Eval hnf in DomType precolim precolim_domMixin.
+Canonical precolim_pdomType := Eval hnf in PDomType precolim.
+
+Record colim := Colim_ { quot_of_colim : {quot_po precolim} }.
+
+Canonical colim_subType := Eval hnf in [newType for quot_of_colim].
+Canonical colim_eqType :=
+  Eval hnf in EqType colim [eqMixin of colim by <:].
+Canonical colim_choiceType :=
+  Eval hnf in ChoiceType colim [choiceMixin of colim by <:].
+Canonical colim_ordType :=
+  Eval hnf in OrdType colim [ordMixin of colim by <:].
+Canonical colim_poType :=
+  Eval hnf in PoType colim [poMixin of colim by <:].
+Canonical colim_subPoType :=
+  Eval hnf in SubPoType colim (fun _ _ => erefl).
+Canonical colim_ppoType :=
+  Eval hnf in PPoType colim [ppoMixin of colim by <: using erefl].
+Canonical colim_domType :=
+  Eval hnf in DomType colim [domMixin of colim by <:
+                               using (fun _ _ _ _ => erefl)].
+Canonical colim_pdomType :=
+  Eval hnf in PDomType colim.
+
+Definition Colim (i : I) (x : F i) : colim :=
+  Colim_ (\pi (PreColim i x)).
+
+Arguments Colim : clear implicits.
+
+Lemma colimP (P : colim -> Type) :
+  (forall i (x : F i), P (Colim i x)) ->
+  forall x : colim, P x.
 Proof.
-move=> mono_f; have f_sat := saturated_mkffun X mono_f.
-by rewrite /mksat insubT.
+move=> H [x]; elim/quotP: x=> y <- /=.
+rewrite reprK; case: y=> [[i y]] /=.
+exact: (H i y).
 Qed.
 
-Lemma appr_mksat (f : T -> S) (X : {proj T}) x :
-  monotone f -> mksat f X x ⊑ f x.
+Lemma colim_apprE i j (x : F i) (y : F j) k (ik : i ⊑ k) (jk : j ⊑ k) :
+  Colim i x ⊑ Colim j y = fmap F ik x ⊑ fmap F jk y.
 Proof.
-move=> mono_f; rewrite mksatE //.
-case X_x: project=> [x'|]; rewrite ?botP //.
-by apply: mono_f; move: (project_appr X x); rewrite X_x.
+rewrite {1}/appr /= /sub_appr /= qapprE.
+by rewrite {1}/appr /= (@precolim_apprE (PreColim i x) (PreColim j y) _ ik jk).
 Qed.
 
-Definition sappr f g := val f ⊑ mkffun g (ssupp f).
-
-Lemma sapprP f g : reflect (forall x, f x ⊑ g x) (sappr f g).
+Lemma colim_apprP i j (x : F i) (y : F j) :
+  reflect (exists k (xi : i ⊑ k) (yi : j ⊑ k), fmap F xi x ⊑ fmap F yi y)
+          (Colim i x ⊑ Colim j y).
 Proof.
-apply/(iffP fapprP).
-- move=> fg x; rewrite {1}/sapp.
-  case fx: (project _ x)=> [x'|]; rewrite ?botP //.
-  have x'_x : x' ⊑ x by move: (project_appr (ssupp f) x); rewrite fx.
-  move: (fg x'); rewrite mkffunE (project_lub_closure fx)=> fgx'.
-  exact: appr_trans fgx' (sat_mono g x'_x).
-- move=> fg x; rewrite mkffunE.
-  case: ifPn=> [x_supp|/fsuppPn ->]; last by rewrite apprxx.
-  by move: (fg x); rewrite {1}/sapp; rewrite projectK.
+apply/(iffP idP); last by case=> k [a [b e]]; rewrite (colim_apprE _ _ a b).
+rewrite {1}/appr /= /sub_appr /= qapprE.
+pose xi := join_apprl i j; pose yi := join_apprr i j.
+rewrite {1}/appr /= (@precolim_apprE (PreColim i x) (PreColim j y) _ xi yi).
+by move=> e; exists (i ∨ j), xi, yi.
 Qed.
 
-Lemma sapprPn f g : reflect (exists x, f x ⋢ g x) (~~ sappr f g).
-apply/(iffP fapprPn).
-- case=> x fgx; exists x; apply: contraNN fgx.
-  rewrite mkffunE; case: ifPn=> [fx|/fsuppPn ->]; last by rewrite apprxx.
-  by rewrite {1}/sapp projectK.
-- case=> x; rewrite {1}/sapp; case fx: (project _ x)=> [x'|]; rewrite ?botP //.
-  move=> fgx; exists x'; apply: contraNN fgx.
-  rewrite mkffunE (project_lub_closure fx)=> fgx; apply: appr_trans fgx _.
-  by apply: sat_mono; move: (project_appr (ssupp f) x); rewrite fx.
-Qed.
-
-Lemma sappr_ax : Po.axioms_of false sappr.
-Proof.
-split=> //.
-- move=> f; apply/sapprP=> x; exact: apprxx.
-- move=> g f h /sapprP fg /sapprP gh; apply/sapprP=> x.
-  exact: (appr_trans (fg x) (gh x)).
-Qed.
-
-Definition sat_poMixin := PoMixin sappr_ax.
-Canonical sat_poType := Eval hnf in PoType sat sat_poMixin.
-Canonical sat_of_poType := Eval hnf in [poType of {sat T -> S}].
-
-Lemma sat_botP f : sat0 ⊑ f.
-Proof.
-apply/sapprP=> x; rewrite /sapp /=; case: project=> [?|]; exact/botP.
-Qed.
-
-Definition sat_ppoMixin := PPoMixin sat_botP.
-Canonical sat_ppoType := Eval hnf in PPoType sat sat_ppoMixin.
-Canonical sat_of_ppoType := Eval hnf in [ppoType of {sat T -> S}].
-
-Lemma sapprE f g (X : {proj T}) :
-  fsubset (ssupp f) X -> f ⊑ g = val f ⊑ mkffun g X.
-Proof.
-move=> sub; apply/(sameP idP)/(iffP idP); last first.
-  rewrite apprE /= /sappr; move=> fg; apply: appr_trans fg _.
-  exact: (mkffunS (sapp g)).
-move=> /fapprP fg; apply/sapprP=> x; rewrite {1}/sapp.
-case f_x: project=> [x'|]; rewrite ?botP //.
-apply: appr_trans (fg x') _; rewrite mkffunE.
-rewrite (fsubsetP sub) ?(project_lub_closure f_x) //.
-by rewrite sat_mono //; move: (project_appr (ssupp f) x); rewrite f_x.
-Qed.
-
-Definition slub f g : coh {sat T -> S} :=
-  let X := projU (ssupp f) (ssupp g) in
-  let f := mksat f X in
-  let g := mksat g X in
-  if val f ⊔ val g is Coh h then Coh (mksat h X)
-  else Incoh.
-
-Variant slub_spec f g : coh {sat T -> S} -> Prop :=
-| SLubCoh h of (forall x, f x ⊔ g x = Coh (h x)) : slub_spec f g (Coh h)
-| SLubIncoh x of f x ⊔ g x = Incoh : slub_spec f g Incoh.
-
-Lemma slubP f g : slub_spec f g (slub f g).
-Proof.
-rewrite /slub.
-set X := projU (ssupp f) (ssupp g).
-set f' := mksat f X.
-set g' := mksat g X.
-case: flubP=> [h hP|x _ _]; last first.
-  rewrite /f' /g' !val_mksat; try exact: sat_mono.
-  rewrite !mkffunE; case: ifP => [_|]; last by rewrite lubxx.
-  exact: SLubIncoh.
-have h_mono: {in X &, monotone h}.
-  move=> x y x_X y_X x_y; suff: Coh (h x) ⊑ Coh (h y) by [].
-  rewrite -!hP mono_lub // /f' /g' val_mksat ?mkffunE ?x_X ?y_X;
-  exact: sat_mono.
-apply: SLubCoh=> x.
-rewrite (@mksatK _ X (projUl (ssupp f) (ssupp g))).
-rewrite (@mksatK _ X (projUr (ssupp f) (ssupp g))).
-rewrite 2?mksatE ?in_mksatE //; try exact: sat_mono.
-case x_X: (project X x)=> [x'|]; rewrite ?lubxx // -hP.
-rewrite /f' /g' !val_mksat ?mkffunE; try exact: sat_mono.
-by rewrite (project_lub_closure x_X).
-Qed.
-
-Lemma slub_appr f g h : slub f g ⊑ Coh h = (f ⊑ h) && (g ⊑ h).
-Proof.
-case: slubP=> [fg fgP|x]; last first.
-  have [->|f_x] := altP (f x =P ⊥); first by rewrite lubBx.
-  have [->|g_x] := altP (g x =P ⊥); first by rewrite lubxB.
-  move=> incoh; apply/esym/negbTE/andP; case=> [/sapprP fh /sapprP gh].
-  by move: (lub_appr (f x) (g x) (h x)); rewrite incoh fh gh.
-apply/(sameP idP)/(iffP idP).
-  case/andP=> /sapprP fh /sapprP gh; apply/sapprP=> x.
-  suff: Coh (fg x) ⊑ Coh (h x) by [].
-  by rewrite -fgP lub_appr fh gh.
-move/sapprP=> fghP; apply/andP; split; apply/sapprP=> x;
-apply: (@appr_trans _ _ (fg x)); rewrite ?fghP //;
-by move: (appr_lubl (f x) (g x)) (appr_lubr (f x) (g x)); rewrite fgP.
-Qed.
-
-Definition sat_domMixin := DomMixin slub_appr.
-Canonical sat_domType := Eval hnf in DomType sat sat_domMixin.
-Canonical sat_of_domType := Eval hnf in [domType of {sat T -> S}].
-Canonical sat_pdomType := Eval hnf in PDomType sat.
-Canonical sat_of_pdomType := Eval hnf in PDomType {sat T -> S}.
-
-End Saturated.
-
-Notation "{ 'sat'  T }" := (sat_of (Phant T))
-  (at level 0, format "{ 'sat'  T }").
-
-Coercion sapp : sat >-> Funclass.
-
-Section SaturatedMap.
-
-Variables (T1 T2 : domType true) (S1 S2 : pdomType true).
-
-
-
-Section Continuous.
-
-Variables (T : domType true) (S : pdomType true).
-
-Record cont := Cont {
-  cont_val : {quot_po {sat T -> S}}
-}.
-Definition cont_of & phant (T -> S) := cont.
-Identity Coercion cont_of_cont : cont_of >-> cont.
-
-Notation "{ 'cont' T }" := (cont_of (Phant T))
-  (at level 0, format "{ 'cont'  T }").
-
-Canonical cont_subType := [newType for cont_val].
-Definition cont_eqMixin := [eqMixin of cont by <:].
-Canonical cont_eqType := Eval hnf in EqType cont cont_eqMixin.
-Definition cont_choiceMixin := [choiceMixin of cont by <:].
-Canonical cont_choiceType := Eval hnf in ChoiceType cont cont_choiceMixin.
-Definition cont_ordMixin := [ordMixin of cont by <:].
-Canonical cont_ordType := Eval hnf in OrdType cont cont_ordMixin.
-Definition cont_poMixin := [poMixin of cont by <:].
-Canonical cont_poType := Eval hnf in PoType cont cont_poMixin.
-Canonical cont_subPoType := Eval hnf in SubPoType cont (fun x y => erefl).
-Definition cont_ppoMixin := [ppoMixin of cont by <: using erefl].
-Canonical cont_ppoType := Eval hnf in PPoType cont cont_ppoMixin.
-Definition cont_domMixin :=
-  [domMixin of cont by <: using (fun f g h e => erefl)].
-Canonical cont_domType := Eval hnf in DomType cont cont_domMixin.
-Canonical cont_subDomType := Eval hnf in [subDomType for cont].
-Canonical cont_pdomType := Eval hnf in PDomType cont.
-
-Canonical cont_of_subType := Eval hnf in [subType of {cont T -> S}].
-Canonical cont_of_eqType := Eval hnf in [eqType of {cont T -> S}].
-Canonical cont_of_choiceType := Eval hnf in [choiceType of {cont T -> S}].
-Canonical cont_of_ordType := Eval hnf in [ordType of {cont T -> S}].
-Canonical cont_of_poType := Eval hnf in [poType of {cont T -> S}].
-Canonical cont_of_ppoType := Eval hnf in [ppoType of {cont T -> S}].
-Canonical cont_of_domType := Eval hnf in [domType of {cont T -> S}].
-Canonical cont_of_subDomType := Eval hnf in [subDomType for {cont T -> S}].
-Canonical cont_of_pdomType := Eval hnf in [pdomType of {cont T -> S}].
-
-Implicit Types f g h : {cont T -> S}.
-
-Definition capp (f : cont) (x : T) : S := repr (val f) x.
-
-Coercion capp : cont >-> Funclass.
-
-Lemma cappE (f : {sat T -> S}) : Cont (\pi f) =1 f.
-Proof.
-move=> x; rewrite /capp /=; case: piP=> g /eqP; rewrite piE.
-by case/andP=> /sapprP fg /sapprP gf; apply: appr_anti; rewrite fg gf.
-Qed.
-
-Lemma cont_mono f : monotone f.
-Proof. move=> x y x_y; exact: sat_mono. Qed.
-
-Lemma capprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
-Proof.
-case: f g=> [f] [g]; rewrite /capp appr_val /=.
-elim/quotP: f=> f ->; elim/quotP: g=> g ->; rewrite qapprE.
-exact: sapprP.
-Qed.
-
-Lemma capprPn f g : reflect (exists x, f x ⋢ g x) (f ⋢ g).
-Proof.
-case: f g=> [f] [g]; rewrite /capp appr_val /=.
-elim/quotP: f=> f ->; elim/quotP: g=> g ->; rewrite qapprE.
-exact: sapprPn.
-Qed.
-
-Lemma eq_cont f g : f =1 g <-> f = g.
-Proof.
-by split=> [|-> //] e; apply: appr_anti; apply/andP; split;
-apply/capprP=> x; rewrite e apprxx.
-Qed.
-
-Lemma clubE f g :
-  f ⊔ g = if val f ⊔ val g is Coh h then Coh (Cont h) else Incoh.
-Proof. by rewrite lub_val; case: lub=> [[h]|]. Qed.
-
-Variant club_spec f g : coh {cont T -> S} -> Prop :=
-| CLubCoh h of (forall x, f x ⊔ g x = Coh (h x)) : club_spec f g (Coh h)
-| CLubIncoh x of f x ⊔ g x = Incoh : club_spec f g Incoh.
-
-Lemma clubP f g : club_spec f g (f ⊔ g).
-Proof.
-case: f g=> [f] [g]; rewrite clubE /=.
-elim/quotP: f=> f ef; elim/quotP: g=> g eg.
-rewrite /lub /= /qlub ef eg /lub /=; case: slubP=> [h hP|].
-- apply: CLubCoh=> x; rewrite /capp /= ef eg hP.
-  case: piP=> h' /eqP; rewrite piE; case/andP=> [/sapprP h_h' /sapprP h'_h].
-  by congr Coh; apply: appr_anti; rewrite h_h' h'_h.
-- by move=> x incoh; apply: (@CLubIncoh _ _ x); rewrite /capp /= ef eg.
-Qed.
-
-Definition mkcont (f : T -> S) (X : {proj T}) : {cont T -> S} :=
-  Cont (\pi (mksat f X)).
-
-Lemma in_mkcontE (f : T -> S) (X : {proj T}) x :
-  {in X &, monotone f} ->
-  mkcont f X x = if project X x is Some x' then f x' else ⊥.
-Proof. by move=> f_mono; rewrite /mkcont cappE in_mksatE. Qed.
-
-Lemma mkcontE (f : T -> S) (X : {proj T}) x :
-  monotone f ->
-  mkcont f X x = if project X x is Some x' then f x' else ⊥.
-Proof. move=> f_mono; rewrite in_mkcontE // => ????; exact: f_mono. Qed.
-
-Definition csupp f : {proj T} := ssupp (repr (cont_val f)).
-
-Lemma csuppP f x : f x = if project (csupp f) x is Some x' then f x' else ⊥.
-Proof.
-by rewrite /capp /csupp (mksatK (fsubsetxx _)) mksatE; last exact: sat_mono.
-Qed.
-
-End Continuous.
-
-Notation "{ 'cont' T }" := (cont_of (Phant T))
-  (at level 0, format "{ 'cont'  T }").
-
-Section ContinuousMap.
-
-Variables (T T' : domType true) (S S' : pdomType true).
-
-Implicit Types (f g h : {cont T -> S}) (fT : T -> T') (fS : S -> S').
-Implicit Types (X : {proj T}) (x : T).
-
-Definition retract fT X (x' : T') : option T :=
-  if project (mapp fT X) x' is Some x' then
-    fpick (fun x => fT x == x') X
-  else None.
-
-Lemma retractP fT X (x' : T') y :
-  injective fT -> lub_preserving fT ->
-  reflect (forall z : T, z \in X -> fT z ⊑ x' -> z ⊑ y)
-          (retract fT X x' ⊑ Some y).
-Proof.
-move=> fT_inj fT_lub; rewrite /retract.
-case proj_x': project=> [x''|]; last first.
-  have /projectP e: project (mapp fT X) x' ⊑ Some (fT y) by rewrite proj_x'.
-  apply: ReflectT=> z z_X z_x'.
-
-Definition loc_inv fT (X : {fset T}) (x' : T') : option T :=
-  fpick (fun x => fT x == x') X.
-
-Lemma loc_invE fT (X : {fset T}) (x : T) :
-  injective fT -> lub_preserving fT -> x \in X ->
-  loc_inv fT X (fT x) = Some x.
-Proof.
-move=> fT_inj fT_lub x_X; rewrite /loc_inv.
-case: fpickP=> [|/(_ x x_X)]; last by rewrite eqxx.
-by move=> x'; rewrite inj_eq => // /eqP ->.
-Qed.
-
-Definition mapc2 fT fS f :=
-  let X := csupp f in
-  mkcont (fun x' : T' => if loc_inv fT X x' is Some x then fS (f x) else ⊥)
-         (mapp fT X).
-
-Lemma mapc2E fT fS f (x' : T') :
-  injective fT -> lub_preserving fT -> monotone fS -> fS ⊥ = ⊥ ->
-  mapc2 fT fS f x' =
-  if retract (mapp fT (csupp f)) x' is Some x then
-    if loc_inv fS (f x) else ⊥.
-Proof.
-move=> fT_inj fT_lub fS_mono fS_strict; rewrite /mapc2 in_mkcontE; last first.
-  move=> _ _ /mappP - /(_ fT_lub) [y yP ->] /mappP - /(_ fT_lub) [z zP ->].
-  by rewrite inj_iso ?loc_invE // => y_z; apply: fS_mono; apply: cont_mono.
-rewrite retract_imfset // csuppP; case f_x: (retract (csupp f) x)=> [x'|] //=.
-by rewrite loc_invE // (retract_lub_closure f_x).
-Qed.
-
-
-Section MapProperties.
-
-Variables (T T' T'' : ordType) (S S' S'' : domType true).
-Implicit Types (f : {fmap T -> S}).
-Implicit Types (h : T -> T') (g : S -> S').
-
-Lemma mapm2_mono h g :
-  injective h -> monotone g -> monotone (mapm2 h g).
-Proof.
-move=> h_inj g_mono f1 f2 /fapprP f1f2; apply/fapprP=> x'.
-have [|/dommPn -> //] := boolP (x' \in domm (mapm2 h g f1)).
-rewrite domm_map2; case/imfsetP=> {x'} x xin ->; rewrite !mapm2E //.
-by case/dommP: xin (f1f2 x)=> y1 ->; case: (f2 x)=> [y2|//] /= /g_mono.
-Qed.
-
-Lemma mapm2_iso h g :
-  injective h -> isotone g -> isotone (mapm2 h g).
-Proof.
-move=> h_inj g_iso f1 f2; apply/(sameP idP)/(iffP idP).
-  exact: mapm2_mono h_inj (iso_mono g_iso) _ _.
-move=> /fapprP f1f2; apply/fapprP=> x; move: (f1f2 (h x)).
-rewrite !mapm2E //; case: (f1 x) (f2 x)=> [y1|//] [y2|//] /=.
-by rewrite oapprE g_iso.
-Qed.
-
-(* FIXME: This proof has to be easier *)
-Lemma mapm2_lub h g :
-  injective h -> lub_preserving g -> lub_preserving (mapm2 h g).
-Proof.
-move=> h_inj g_lub f1 f2; apply/esym/lub_unique.
-move=> f3; apply/(sameP andP)/(iffP idP).
-- case ef12: (f1 ⊔ f2)=> [f12|//] /=.
-  move=> /fapprP f12P.
-  suffices H: forall x, (mapm2 h g f1 x ⊑ f3 x) && (mapm2 h g f2 x ⊑ f3 x).
-    by split; apply/fapprP=> x; case/andP: (H x).
-  move=> x; rewrite is_lub_lub.
-  have [|] := boolP (x \in h @: domm f12); last first.
-    rewrite (domm_lub ef12) imfsetU in_fsetU negb_or.
-    rewrite -2!(domm_map2 h g) !mem_domm.
-    by case: (mapm2 h g f1 x) (mapm2 h g f2 x)=> [?|] [?|].
-  case/imfsetP=> {x} x xin ->; move: (f12P (h x)); rewrite !mapm2E //.
-  move: xin; rewrite mem_domm (flubE ef12).
-  case: (f1 x) (f2 x)=> [x1|] [x2|] //=.
-  by rewrite ![Some _ ⊔ _]/lub /= g_lub; case: (x1 ⊔ x2)=> //=.
-- move/andP; rewrite is_lub_lub.
-  case ef12': (mapm2 _ _ _ ⊔ mapm2 _ _ _)=> [f12'|//] f12f3.
-  case ef12: (f1 ⊔ f2)=> [f12|] /=.
-  + apply/fapprP=> x.
-    have [|] := boolP (x \in h @: domm f12); last first.
-      by rewrite -(domm_map2 h g) mem_domm; case: (mapm2 _ _ _ x).
-    case/imfsetP=> {x} x xin ->.
-    rewrite mapm2E // (flubE ef12).
-    move/fapprP: f12f3=> /(_ (h x)); apply: appr_trans.
-    rewrite (flubE ef12') !mapm2E //.
-    move: xin; rewrite mem_domm (flubE ef12).
-    case: (f1 x) (f2 x)=> [x1|] [x2|] //=; try by rewrite apprxx.
-    by rewrite /lub /= g_lub; case: (_ ⊔ _)=> //= ?; rewrite apprxx.
-  + case/flub_None: ef12=> x.
-    case ex1: (f1 x)=> [x1|//]; case ex2: (f2 x)=> [x2|//].
-    rewrite /lub /=; case ex12: (x1 ⊔ x2)=> [//|] _.
-    suffices: f12' (h x).
-      by rewrite (flubE ef12') !mapm2E // ex1 ex2 /= /lub /= g_lub ex12.
-    rewrite -mem_domm (domm_lub ef12') in_fsetU !mem_domm !mapm2E //.
-    by rewrite ex1.
-Qed.
-
-End MapProperties.
-
-Section MapMonotone.
-
-Variables T T' S S' : domType.
-Implicit Types (f : T -> T') (g : S -> S').
-Implicit Types (h : {fmap T -> S}).
-
-Lemma mapm2_mono2 f g h :
-  isotone f -> monotone g -> monotoneb h ->
-  monotoneb (mapm2 f g h).
-Proof.
-move=> f_iso g_mono /monotonebP h_mono; apply/monotonebP.
-rewrite domm_map2=> _ _ /imfsetP [x xin ->] /imfsetP [y yin ->].
-rewrite f_iso ?mapm2E; try exact: iso_inj.
-move=> /(h_mono _ _ xin yin).
-by case/dommP: xin=> x' ->; case/dommP: yin=> y' -> /g_mono.
-Qed.
-
-End MapMonotone.
-
-Module SubDom.
-
-Section ClassDef.
-
-Variables (T : domType) (P : pred T).
-
-Record type := Pack {
-  sort : subType P;
-  _    : lub_closed P
-}.
-
-Local Coercion sort : type >-> subType.
-
-Variable sT : type.
-
-Implicit Types x y z : sT.
-
-Definition subType_appr x y := val x ⊑ val y.
-Definition subType_lub x y : option sT :=
-  obind (fun z : T => insub z) (val x ⊔ val y).
-
-Lemma lub_val x y : val x ⊔ val y = omap val (subType_lub x y).
-Proof.
-rewrite /subType_lub; case: sT x y => /= S SP x y.
-case e: lub => [z|] //=.
-by rewrite (insubT P (SP _ _ (valP x) (valP y) _ e)) /= SubK.
-Qed.
-
-Lemma subTypeP : Dom.axioms subType_appr subType_lub.
+Lemma eq_colim i j (x : F i) (y : F j) :
+  (exists k (xi : i ⊑ k) (yi : j ⊑ k), fmap F xi x = fmap F yi y) <->
+  Colim i x = Colim j y.
 Proof.
 split.
-- move=> x; exact: apprxx.
-- move=> y x z; exact: appr_trans.
-- move=> x y xy; exact/val_inj/anti_appr.
-by move=> x y z; rewrite /subType_appr is_lub_lub lub_val; case: subType_lub.
+- by case=> k [xi [yi e]]; apply/appr_anti/andP; split;
+  apply/colim_apprP; [exists k, xi, yi|exists k, yi, xi];
+  rewrite e apprxx.
+- case=> /eqP; rewrite piE /po_eq /= /appr /=.
+  pose xi := join_apprl i j; pose yi := join_apprr i j.
+  rewrite (@precolim_apprE (PreColim i x) (PreColim j y) _ xi yi).
+  rewrite (@precolim_apprE (PreColim j y) (PreColim i x) _ yi xi) /=.
+  by move=> /appr_anti e; exists (i ∨ j), xi, yi.
 Qed.
 
-Definition domMixin := DomMixin subTypeP.
-Definition domType := DomType sT domMixin.
+Definition colim_tag (x : colim) : I :=
+  tag (repr (val x)).
 
-Definition pack (sT : subType P) m & phant sT := Pack sT m.
+Definition colim_val (x : colim) : F (colim_tag x) :=
+  tagged (repr (val x)).
 
-End ClassDef.
-
-Module Import Exports.
-Coercion sort : type >-> subType.
-Coercion domType : type >-> Dom.type.
-Canonical domType.
-Notation subDomType := type.
-Notation SubDomType T m := (@pack _ _ _ m (Phant T)).
-Notation "[ 'domMixin' 'of' T 'by' <: ]" :=
-    (domMixin _ : Dom.mixin_of T)
-  (at level 0, format "[ 'domMixin'  'of'  T  'by'  <: ]") : form_scope.
-End Exports.
-
-End SubDom.
-Export SubDom.Exports.
-
-Section SubDomTheory.
-
-Variables (T : domType) (P : pred T) (sT : subDomType P).
-Implicit Types x y z : sT.
-
-Lemma lub_val x y : val x ⊔ val y = omap val (x ⊔ y).
-Proof. exact: SubDom.lub_val. Qed.
-
-Lemma appr_val x y : x ⊑ y = val x ⊑ val y.
-Proof. by rewrite !appr_lubL lub_val; case: (_ ⊔ _). Qed.
-
-End SubDomTheory.
-
-Section ProjDom.
-
-Variables (T : domType) (xs : proj T).
-
-Structure proj_dom := ProjDom {
-  proj_elt :> T;
-  _        :  proj_elt \in xs
-}.
-
-Canonical proj_dom_subType := [subType for proj_elt].
-Definition proj_dom_eqMixin := [eqMixin of proj_dom by <:].
-Canonical proj_dom_eqType := Eval hnf in EqType proj_dom proj_dom_eqMixin.
-Definition proj_dom_choiceMixin := [choiceMixin of proj_dom by <:].
-Canonical proj_dom_choiceType :=
-  Eval hnf in ChoiceType proj_dom proj_dom_choiceMixin.
-Definition proj_dom_ordMixin := [ordMixin of proj_dom by <:].
-Canonical proj_dom_ordType :=
-  Eval hnf in OrdType proj_dom proj_dom_ordMixin.
-
-Lemma proj_domP : lub_closed (mem xs).
-Proof. apply/lub_closedP/eqP; exact: (valP xs). Qed.
-
-Canonical proj_dom_subDomType :=
-  Eval hnf in SubDomType proj_dom proj_domP.
-Definition proj_dom_domMixin := [domMixin of proj_dom by <:].
-Canonical proj_dom_domType :=
-  Eval hnf in DomType proj_dom proj_dom_domMixin.
-
-End ProjDom.
-
-Coercion proj_dom : proj >-> Sortclass.
-
-Module Sat.
-
-Section Def.
-
-Variable T S : domType.
-Implicit Types (f g : {fmap T -> S}) (x : T).
-
-Definition saturated f :=
-  (lub_closure (domm f) == domm f) && monotoneb f.
-
-Lemma saturated0 : saturated emptym.
+Lemma Colim_fmap i j (ij : i ⊑ j) (x : F i) :
+  Colim j (fmap F ij x) = Colim i x.
 Proof.
-by rewrite /saturated domm0 lub_closure0 eqxx monotoneb0.
+apply/eq_colim; exists j, (apprxx j), ij.
+by rewrite (eq_irrelevance (apprxx j) (1 : hom j j)) fmap1 finDom_idE.
 Qed.
 
-Lemma saturated1 x y : saturated (setm emptym x y).
+Lemma colim_valK (x : colim) : Colim _ (colim_val x) = x.
 Proof.
-rewrite /saturated domm_set domm0 fsetU0 lub_closure1 eqxx.
-apply/monotonebP=> x1 x2; rewrite domm_set domm0 fsetU0.
-by move=> /fset1P -> /fset1P -> _; rewrite apprxx.
+case: x=> x; rewrite /Colim /colim_val /colim_tag /= /PreColim.
+elim/quotP: x=> /= - [x] -> /=.
+by congr (Colim_ (\pi (PreColim_ _))); case: x.
 Qed.
 
-Record sat := Sat {
-  sat_val : {fmap T -> S};
-  _       : saturated sat_val
-}.
-
-Canonical sat_subType := [subType for sat_val].
-Definition sat_eqMixin := [eqMixin of sat by <:].
-Canonical sat_eqType := Eval hnf in EqType sat sat_eqMixin.
-Definition sat_choiceMixin := [choiceMixin of sat by <:].
-Canonical sat_choiceType := Eval hnf in ChoiceType sat sat_choiceMixin.
-Definition sat_ordMixin := [ordMixin of sat by <:].
-Canonical sat_ordType := Eval hnf in OrdType sat sat_ordMixin.
-
-Definition app f x :=
-  odflt (lubn (fset (pmap f [seq x' <- domm f | x' ⊑ x]))) None.
-
-Definition saturate f : option sat :=
-  let g := mkfmapfp (app f) (lub_closure (domm f)) in
-  if f ⊑ g then insub g else None.
-
-Variant saturate_spec f : option sat -> Type :=
-| SaturateSome fs of
-  f ⊑ sat_val fs &
-  (forall gs, f ⊑ sat_val gs -> sat_val fs ⊑ sat_val gs) :
-  saturate_spec f (Some fs)
-| SaturateNone of
-  (forall gs, f ⋢ sat_val gs) :
-  saturate_spec f None.
-
-Lemma saturateP f : saturate_spec f (saturate f).
+Lemma ColimB (i : I) : Colim i ⊥ = ⊥.
 Proof.
-rewrite /saturate; set g := mkfmapfp (app f) _.
-have gP1: forall gs, f ⊑ sat_val gs -> g ⊑ sat_val gs.
-  move=> gs /fapprP f_gs; apply/fapprP=> x.
-  rewrite /g mkfmapfpE; case: ifP=> [x_dom|//].
-  rewrite /app; case: lubnP=> //= y not0 yP.
-  have /dommP [y' gs_x]: x \in domm (sat_val gs).
-    move: (x) x_dom; apply/fsubsetP/lub_closure_min.
-      by apply/domm_appr/fapprP.
-    by apply/lub_closedP/eqP; case/andP: (valP gs).
-  rewrite gs_x; suffices: y ⊑ y' by [].
-  rewrite -{}yP; apply/allP=> y''; rewrite in_fset mem_pmap.
-  case/mapP=> x''; rewrite mem_filter; case/andP=> x''_x _ /esym f_x''.
-  move/(_ x''): f_gs; rewrite f_x''.
-  case gs_x'': (sat_val gs x'')=> [y'''|//] y''_y'''.
-  suffices: y''' ⊑ y' by apply: appr_trans.
-  have /andP [_ /monotonebP mono] := valP gs.
-  by move/(_ x'' x _ _ x''_x): mono; rewrite gs_x gs_x''; apply;
-  rewrite mem_domm ?gs_x ?gs_x''.
-have gP2: forall gs, f ⊑ sat_val gs -> f ⊑ g.
-  move=> gs f_gs; apply/fapprP=> x.
-  rewrite mkfmapfpE; case f_x: (f x)=> [y|//].
-  rewrite (fsubsetP (lub_closure_ext (domm f))) ?mem_domm ?f_x // /app.
-  move/fapprP/(_ x): (f_gs); rewrite f_x.
-  case gs_x: (sat_val gs x)=> [y'|//] y_y'.
-  set Y := fset (pmap f _).
-  have Yn0: Y != fset0.
-    apply/fset0Pn; exists y.
-    rewrite /Y in_fset mem_pmap -f_x; apply/mapP.
-    by exists x=> //; rewrite mem_filter apprxx mem_domm f_x.
-  have y'_ub: all (fun y => y ⊑ y') Y.
-    apply/allP=> y''; rewrite /Y in_fset mem_pmap.
-    case/mapP=> x'; rewrite mem_filter; case/andP=> x'_x _ /esym f_x'.
-    move/fapprP/(_ x'): (f_gs); rewrite f_x'.
-    case gs_x': (sat_val gs x')=> [y'''|//] y''_y'''.
-    suffices: y''' ⊑ y' by apply: appr_trans.
-    have /andP [_ /monotonebP mono] := valP gs.
-    move/(_ x' x _ _ x'_x): mono.
-    by rewrite gs_x' gs_x; apply; rewrite mem_domm ?gs_x' ?gs_x.
-  move: (is_lubn_lubn Y y'); rewrite Yn0 y'_ub.
-  case lubn_YP: (lubn Y)=> [lubn_Y|//] /= _.
-  move: (lubn_appr_conv lubn_Y lubn_YP); rewrite apprxx.
-  move=> /allP; apply; rewrite /Y in_fset mem_pmap -f_x.
-  by apply/mapP; exists x; rewrite // mem_filter apprxx mem_domm f_x.
-have gP3: forall gs, f ⊑ sat_val gs -> saturated g.
-  move=> gs f_gs; rewrite /saturated.
-  have domm_g: domm g = lub_closure (domm f).
-    rewrite /g domm_mkfmapfp; apply/eq_fset=> x.
-    rewrite in_fset mem_filter andbC.
-    have [x_in|] //= := boolP (x \in _).
-    rewrite /app; set Y := fset _.
-    have /lub_closureP [X Xsub lubn_XP] := x_in.
-    have /fset0Pn [x0 x0_in] : X != fset0.
-      by apply: lubn_neq0; rewrite lubn_XP.
-    case/(fsubsetP Xsub)/dommP: (x0_in)=> y f_x0.
-    have Yn0: Y != fset0.
-      apply/fset0Pn; exists y; rewrite /Y in_fset mem_pmap -f_x0.
-      apply/mapP; exists x0; rewrite // mem_filter mem_domm f_x0.
-      by rewrite (lubn_ub lubn_XP).
-    move/fapprP/(_ x0): (f_gs)=> f_x0_gs_x0.
-    have gs_x: x \in domm (sat_val gs).
-      move: (x) x_in; apply/fsubsetP/lub_closure_min.
-        by apply/domm_appr.
-      by apply/lub_closedP/eqP; case/andP: (valP gs).
-    have /andP [_ /monotonebP' mono] := valP gs.
-    have := appr_trans f_x0_gs_x0 (mono _ _ (lubn_ub lubn_XP x0_in) gs_x).
-    rewrite f_x0; case gs_xE: (val gs x)=> [y'|] //= y_y'.
-    have y'_ub: all (fun y'' => y'' ⊑ y') Y.
-      apply/allP=> y''; rewrite /Y in_fset mem_pmap.
-      case/mapP=> x'; rewrite mem_filter.
-      case/andP=> x'_x _ /esym f_x'.
-      move/fapprP/(_ x'): (f_gs).
-      rewrite f_x'; case gs_x': (sat_val gs x')=> [y'''|] // y''_y'''.
-      suffices: y''' ⊑ y' by apply: appr_trans.
-      by move/(_ _ _ x'_x): mono; rewrite mem_domm gs_xE gs_x'; apply.
-    by move: (is_lubn_lubn Y y'); rewrite Yn0 y'_ub; case: (lubn _).
-  rewrite domm_g lub_closure_idem eqxx /=.
-  apply/monotonebP'=> x1 x2 x1x2.
-  rewrite /g domm_mkfmapfp in_fset mem_filter.
-  case/andP=> app_f_x2 x2_in.
-  rewrite !mkfmapfpE x2_in; case: ifP=> // x1_in.
-  move: app_f_x2; rewrite /app.
-  set Y1 := fset (pmap f [seq x' <- domm f | x' ⊑ x1]).
-  set Y2 := fset (pmap f [seq x' <- domm f | x' ⊑ x2]).
-  have /lubnS: fsubset Y1 Y2.
-    apply/fsubsetP=> y; rewrite /Y1 /Y2 !in_fset !mem_pmap.
-    case/mapP=> x; rewrite mem_filter; case/andP=> x_x1 _ /esym f_x.
-    apply/mapP; exists x; rewrite -?f_x // mem_filter (appr_trans x_x1) //.
-    by rewrite mem_domm f_x.
-  case: (lubn Y1)=> [y1|] //=.
-  by case: (lubn Y2).
-case: ifPn=> [fg|/fapprPn fgN]; last first.
-  apply: SaturateNone=> gs; apply/negP=> /gP2/fapprP/(_ (xchoose fgN)).
-  by rewrite (negbTE (xchooseP fgN)).
-case: insubP=> [/= gs sat_g e|gN]; last first.
-  apply: SaturateNone=> gs; apply: contra gN; exact: gP3.
-by apply: SaturateSome; rewrite e.
+apply/eq_colim; exists i, (apprxx i), (botP i).
+by rewrite !(eqP (valP (fmap F _))).
 Qed.
 
-Implicit Types fs gs hs : sat.
-
-Definition sat_appr (fs gs : sat) : bool :=
-  sat_val fs ⊑ sat_val gs.
-
-Definition sat_lub (fs gs : sat) : option sat :=
-  if sat_val fs ⊔ sat_val gs is Some hs then saturate hs else None.
-
-Lemma sat_lubP : Dom.axioms sat_appr sat_lub.
+Lemma Colim_inj (i : I) : injective (Colim i).
 Proof.
-rewrite /sat_appr /sat_lub; split.
-- by move=> fs; rewrite apprxx.
-- by move=> hs fs gs; apply: appr_trans.
-- by move=> fs gs /anti_appr/val_inj.
-move=> fs gs hs; rewrite is_lub_lub; case: lub=> // h.
-case: saturateP=> [fgs|/(_ hs)/negbTE ->] // h_fgs fgs_opt.
-apply/(sameP idP)/(iffP idP); first by apply: appr_trans.
-exact: fgs_opt.
+move=> x y /eq_colim; case=> k [xi [yi]].
+by rewrite (eq_irrelevance xi yi) => /finDom_hom_inj.
 Qed.
 
-Definition sat_domMixin := DomMixin sat_lubP.
-Canonical sat_domType := Eval hnf in DomType sat sat_domMixin.
-
-End Def.
-
-End Sat.
-
-Module Cont.
-
-Section Def.
-
-Variables T S : domType.
-
-Record precont := PreCont { sat_of : Sat.sat T S }.
-
-Definition app f x := obind f (retract (domm (val f)) x).
-
-Implicit Types fi gi hi : {f | saturated f}.
-
-Definition cont_appr fi gi :=
-  all (fun x => app (val fi) x ⊑ app (val gi) x)
-      (lub_closure (domm (val fi) :|: domm (val gi))).
-
-Lemma cont_apprP fi gi :
-  reflect (forall x, app (val fi) x ⊑ app (val gi) x) (cont_appr fi gi).
+Lemma Colim_lub (i : I) : lub_preserving (Colim i).
 Proof.
-apply/(iffP allP)=> //; move=> efg x; rewrite /app.
-rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
-rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
-case e: (retract (_ :|: _) x)=> [x'|] //=.
-exact: (efg _ (retract_lub_closure e)).
+move=> x y; apply/esym/lub_unique; case=> [z|] //=.
+elim/colimP: z=> j z.
+pose ik := join_apprl i j; pose jk := join_apprr i j.
+rewrite ![Coh _ ⊑ _](colim_apprE _ _ ik jk) -lub_appr finDom_hom_lub.
+by case: (x ⊔ y)=> [xy|] //=; rewrite [Coh _ ⊑ _](colim_apprE _ _ ik jk).
 Qed.
 
-Lemma cont_apprPn fi gi :
-  reflect (exists x, app (val fi) x ⋢ app (val gi) x) (~~ cont_appr fi gi).
+Definition colim_proj_tag (X : {proj colim}) : I :=
+  foldr (fun (x : colim) j => tag (repr (val x)) ∨ j) ⊥ X.
+
+Lemma colim_proj_tagP (X : {proj colim}) (x : X) :
+  colim_tag (val x) ⊑ colim_proj_tag X.
 Proof.
-apply/(iffP allPn); first by case; eauto.
-case=> x; rewrite /app.
-rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
-rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
-case ex: (retract (domm (val fi) :|: domm (val gi)) x)=> [x'|] //=.
-move=> fg; exists x'=> //; exact: retract_lub_closure ex.
+case: x=> [x]; rewrite /= inE inE /= /colim_proj_tag.
+elim: (val (val X))=> [|y ys IH] //=.
+rewrite inE; case/orP=> [/eqP ->|x_ys]; first exact: join_apprl.
+apply: appr_trans (IH x_ys) _; apply: join_apprr.
 Qed.
 
-Lemma cont_apprxx : reflexive cont_appr.
-Proof. by move=> fi; apply/cont_apprP=> x; rewrite apprxx. Qed.
+Definition colim_proj_inv (X : {proj colim}) (x : X) : F (colim_proj_tag X) :=
+  fmap F (colim_proj_tagP x) (colim_val (val x)).
 
-Lemma cont_appr_trans : transitive cont_appr.
+Lemma colim_proj_invK (X : {proj colim}) (x : X) :
+  Colim _ (colim_proj_inv x) = val x.
+Proof. by rewrite /colim_proj_inv Colim_fmap colim_valK. Qed.
+
+Lemma colim_proj_invB (X : {proj colim}) : @colim_proj_inv X ⊥ = ⊥.
 Proof.
-move=> gi fi hi /cont_apprP fg /cont_apprP gh.
-apply/cont_apprP=> x; exact: appr_trans (fg x) (gh x).
+apply: (@Colim_inj (colim_proj_tag X)).
+by rewrite colim_proj_invK ColimB.
 Qed.
 
-Lemma app_mono fi gi x1 x2 :
-  cont_appr fi gi -> x1 ⊑ x2 -> app (val fi) x1 ⊑ app (val gi) x2.
+Lemma colim_proj_inv_lub (X : {proj colim}) :
+  lub_preserving (@colim_proj_inv X).
 Proof.
-rewrite /app => /cont_apprP figi x1x2.
-apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
-  move: (retract_mono (domm (val fi)) x1x2).
-  case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
-  case e2: (retract (domm (val fi)) x2)=> [x2'|] //=.
-  rewrite oapprE=> x1'x2'.
-  case/andP: (valP fi) => /eqP closed /monotonebP mono.
-  rewrite -closed in mono.
-  exact: mono (retract_lub_closure e1) (retract_lub_closure e2) x1'x2'.
-exact/figi.
+move=> /= x y; move: (Colim_lub (colim_proj_inv x) (colim_proj_inv y)).
+rewrite !colim_proj_invK lub_val.
+case: (x ⊔ y) (colim_proj_inv x ⊔ _ y) => [xy|] [fxy|] //= [e].
+congr Coh; apply: (@Colim_inj (colim_proj_tag X)).
+by rewrite -e colim_proj_invK.
 Qed.
 
-Notation pcont_lub fi gi :=
-  (mkfmapfp (fun x => odflt None (app (val fi) x ⊔ app (val gi) x))
-            (lub_closure (domm (val fi) :|: domm (val gi)))).
-
-Definition cont_lub fi gi : option {f | saturated f} :=
-  if insub (pcont_lub fi gi) is Some hi then
-    if cont_appr fi hi && cont_appr gi hi then Some hi
-    else None
-  else None.
-
-Lemma cont_lubP : QDom.axioms cont_appr cont_lub.
+Lemma proj_colimP (X : {proj colim}) :
+  exists (Y : {proj F (colim_proj_tag X)}), X = mapp (Colim _) Y.
 Proof.
-split=> /=.
-- move=> fq; exact: cont_apprxx.
-- move=> gq fq hq; exact: cont_appr_trans.
-move=> fi gi hi; rewrite /cont_lub /=.
-set clos := lub_closure (domm (val fi) :|: domm (val gi)).
-set fg   := mkfmapfp _ clos.
-have e :
-  forall hi, fsubset (domm (val hi)) (domm (val fi) :|: domm (val gi)) ->
-  forall x, app (val hi) x = obind (app (val hi)) (retract clos x).
-  move=> hi' sub.
-  move: (fsubset_trans sub (lub_closure_ext _)) => {sub} sub x.
-  by rewrite /app -(retractS _ sub); case: (retract clos x).
-have ret_clos : forall x x', retract clos x = Some x' -> x' \in clos.
-  move=> x x' ex; move: (retract_lub_closure ex).
-  by rewrite lub_closure_idem => ->.
-move: {e} (e _ (fsubsetUl _ _)) (e _ (fsubsetUr _ _))=> fE gE.
-have [/allP coh|/allPn [x x_in incoh]] :=
-  boolP (all (fun x => app (val fi) x ⊔ app (val gi) x) clos).
-  have {coh} coh : forall x, app (val fi) x ⊔ app (val gi) x.
-    move=> x; rewrite fE gE; case ex: (retract clos x) => [x'|] //=.
-    apply: coh; rewrite /clos -lub_closure_idem.
-    by apply: retract_lub_closure ex.
-  have domm_fg : domm fg = clos.
-    apply/eq_fset=> x'; rewrite domm_mkfmapfp in_fset mem_filter andbC.
-    have [in_clos|] //= := boolP (x' \in lub_closure _).
-    move: (coh x').
-    case fi_x': (app (val fi) x')=> [y1|] //=;
-    case gi_x': (app (val gi) x')=> [y2|] //=.
-      by rewrite /lub /=; case: lub.
-    move: fi_x'; rewrite /app.
-    case e_fi_x': (retract (domm (val fi)) x')=> [x''|] //=.
-      move=> fi_x''; move: (retract_lub_closure e_fi_x').
-      case/andP: (valP fi)=> /eqP -> _.
-      by rewrite mem_domm fi_x''.
-    move=> _ _; move: gi_x'; rewrite /app.
-    case e_gi_x': (retract (domm (val gi)) x')=> [x''|] //=.
-      move=> gi_x''; move: (retract_lub_closure e_gi_x').
-      case/andP: (valP gi)=> /eqP ->.
-      by rewrite mem_domm gi_x''.
-    by move/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
-  have fgE : forall x, obind fg (retract clos x)
-                       = odflt None (app (val fi) x ⊔ app (val gi) x).
-    move=> x; rewrite fE gE; case ex: (retract clos x)=> [x'|] //=.
-    by rewrite mkfmapfpE (ret_clos _ _ ex).
-  have Pfg : (lub_closure (domm fg) == domm fg) && monotoneb fg.
-    rewrite domm_fg /clos lub_closure_idem eqxx /=.
-    apply/monotonebP=> x1 x2 in1 in2 x1x2; move: (fgE x1) (fgE x2) (in2).
-    rewrite {1 2}domm_fg in in1 in2.
-    rewrite mem_domm ?retractK ?lub_closure_idem //= => -> ->.
-    move: (coh x1) (coh x2).
-    case el1: (app (val fi) x1 ⊔ app (val gi) x1)=> [[l1|]|] //= _.
-    case el2: (app (val fi) x2 ⊔ app (val gi) x2)=> [[l2|]|] //= _.
-    move: (is_lub_lub (app (val fi) x1) (app (val gi) x1) (Some l2)).
-    rewrite el1 => <- => _; apply/andP; split.
-      exact: (appr_trans (app_mono (cont_apprxx fi) x1x2) (lub_apprL el2)).
-    exact: (appr_trans (app_mono (cont_apprxx gi) x1x2) (lub_apprR el2)).
-  rewrite insubT.
-  set fgi : {f | saturated f} := Sub fg Pfg.
-  have {fgE} fgE : forall x, app (val fgi) x =
-                             odflt None (app (val fi) x ⊔ app (val gi) x).
-    by move=> x; rewrite {1}/app /= domm_fg.
-  move: fgi fgE => /= {fg Pfg domm_fg} fgi fgiE.
-  have -> /= : cont_appr fi fgi && cont_appr gi fgi.
-    apply/andP; split.
-      apply/cont_apprP=> x; rewrite fgiE fE gE.
-      case ex: (retract clos x)=> [x'|] //=.
-      move: (coh x').
-      case ey: lub=> [y|] //= _.
-      exact: (lub_apprL ey).
-    apply/cont_apprP=> x; rewrite fgiE fE gE.
-    case ex: (retract clos x)=> [x'|] //=.
-    move: (coh x').
-    case ey: lub=> [y|] //= _.
-    exact: (lub_apprR ey).
-  apply/(sameP andP)/(iffP (cont_apprP _ _)).
-    move=> fgi_hi; split; apply/allP=> x in_clos.
-      move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-      move: (fgi_hi x) (coh x); rewrite fgiE.
-      by case: lub=> /= [y|] // -> _ /andP [].
-    move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-    move: (fgi_hi x) (coh x); rewrite fgiE.
-    by case: lub=> /= [y|] // -> _ /andP [].
-  case=> /cont_apprP fi_hi /cont_apprP gi_hi x; rewrite fgiE; move: (coh x).
-  move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-  by rewrite fi_hi gi_hi /=; case: lub.
-have {incoh} incoh : forall hi', ~~ (cont_appr fi hi' && cont_appr gi hi').
-  move=> hi'; apply: contra incoh => /andP [/cont_apprP fiP /cont_apprP giP].
-  move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi') x)).
-  by rewrite fiP giP; case: lub.
-rewrite (negbTE (incoh hi)); case: insubP=> /= [fgi inc|] //.
-by rewrite (negbTE (incoh fgi)).
+have m1 := mappP _ _ (ColimB (colim_proj_tag X)) (@Colim_lub (colim_proj_tag X)).
+have m2 := mappP _ _ (colim_proj_invB X) (@colim_proj_inv_lub X).
+exists (mapp (@colim_proj_inv X) projT); apply/eq_proj=> /= x.
+apply/(sameP idP)/(iffP idP).
+- case/m1=> {x} x xP ->; case/m2: xP=> {x} x xP ->.
+  by rewrite colim_proj_invK (valP x).
+- move=> x_X; apply/m1.
+  exists (colim_proj_inv (Sub x x_X)); last by rewrite colim_proj_invK.
+  apply/m2; exists (Sub x x_X)=> //; exact: in_projT.
 Qed.
 
-Canonical cont_predom := Eval hnf in QDom.PreDom cont_lubP.
+End FinPDomColim.
 
-(* FIXME: Using a regular definition here makes it harder for Coq to figure out
-   that the coercion into functions below is valid. *)
+Section Casts.
 
-Record type (p : phant (T -> S)) := Cont {
-  quot_of_cont : {qdom cont_appr}
-}.
+Variable (T : Type).
+Implicit Types (x y z : T).
 
+Definition cast (P : T -> Type) x y (e : x = y) : P x -> P y :=
+  match e with erefl => id end.
 
+Lemma castD (P : T -> Type) x y z (p : x = y) (q : y = z) (a : P x) :
+  cast q (cast p a) = cast (etrans p q) a.
+Proof. by case: z / q=> /=. Qed.
 
-Module Cont.
+End Casts.
 
-Section Def.
+Arguments cast {T} P {x y} e.
 
-Variable T S : domType.
-Implicit Types (f g : {fmap T -> S}) (x : T).
+Definition castK (T P : Type) (x y : T) (p : x = y) : cast (fun _ => P) p = id :=
+  match p with erefl => erefl end.
 
-Local Open Scope quotient_scope.
+Definition sapp_cast T S (P : T -> S -> Type) x1 x2 y (p : x1 = x2) :
+  forall (f : forall y, P x1 y),
+    cast (fun x => forall y, P x y) p f y = cast (fun x => P x y) p (f y) :=
+  match p with erefl => fun _ => erefl end.
 
-Definition saturated f :=
-  (lub_closure (domm f) == domm f) && monotoneb f.
+Definition cast_sapp T (S R : T -> Type) x1 x2 (p : x1 = x2) :
+  forall (f : forall x, S x -> R x) (a : S x1),
+  f x2 (cast S p a) = cast R p (f x1 a) :=
+  match p with erefl => fun _ _ => erefl end.
 
-Lemma saturated0 : saturated emptym.
+Definition dapp_cast T (P : T -> Type) (Q : forall x, P x -> Type) x y
+  (p : x = y) :
+  forall (f : forall a : P x, Q x a) (a : P y),
+  cast (fun x => forall a : P x, Q x a) p f a =
+  match esym p as q in _ = z return Q z (cast P q a) -> Q y a with
+  | erefl => id
+  end (f (cast P (esym p) a)) :=
+  match p with
+  | erefl => fun _ _ => erefl
+  end.
+
+Definition cast_congr1 T (P : T -> Type) x y (p : x = y) :
+  forall (a : P x), cast P p a = cast id (congr1 P p) a :=
+  match p with erefl => fun a => erefl end.
+
+Definition eq_tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) (e : x = y) :
+  cast T_ (congr1 tag e) (tagged x) = tagged y :=
+  match e with
+  | erefl => erefl
+  end.
+
+Lemma eq_Tagged (I : Type) (T_ : I -> Type) (x y : {i : I & T_ i}) :
+  forall (p : tag x = tag y),
+    cast T_ p (tagged x) = tagged y ->
+    x = y.
 Proof.
-by rewrite /saturated domm0 lub_closure0 eqxx monotoneb0.
+by case: x y=> [i xi] [j yj] /= p; case: j / p yj => yj /= <-.
 Qed.
 
-Lemma saturated1 x y : saturated (setm emptym x y).
+Section IsoOfEq.
+
+Variable C : catType.
+
+Implicit Types X Y Z : C.
+
+Definition iso_of_eq X Y (e : X = Y) : hom X Y :=
+  match e with erefl => cat_id _ end.
+
+Lemma iso_of_eqK X Y (e : X = Y) : iso_of_eq e ∘ iso_of_eq (esym e) = 1.
+Proof. by case: Y / e; rewrite comp1f. Qed.
+
+Lemma iso_of_eqKV X Y (e : X = Y) : iso_of_eq (esym e) ∘ iso_of_eq e = 1.
+Proof. by case: Y / e; rewrite comp1f. Qed.
+
+Lemma iso_of_eqD X Y Z (e1 : Y = Z) (e2 : X = Y) :
+  iso_of_eq (etrans e2 e1) = iso_of_eq e1 ∘ iso_of_eq e2.
+Proof. by case: Z / e1 e2 => e2; rewrite /= comp1f. Qed.
+
+End IsoOfEq.
+
+Section NatFunctor.
+
+Variables (C : catType) (X : nat -> C) (f : forall i, hom (X i) (X i.+1)).
+
+Fixpoint chain_map_def n m : hom (X n) (X (m + n)) :=
+  match m with
+  | 0    => 1
+  | m.+1 => f (m + n) ∘ chain_map_def n m
+  end.
+
+(*Lemma chain_map_defSn n m :
+  chain_map_def n m.+1 =
+  iso_of_eq (congr1 X (addnS _ _)) ∘ chain_map_def n.+1 m ∘ f n.
 Proof.
-rewrite /saturated domm_set domm0 fsetU0 lub_closure1 eqxx.
-apply/monotonebP=> x1 x2; rewrite domm_set domm0 fsetU0.
-by move=> /fset1P -> /fset1P -> _; rewrite apprxx.
+
+
+elim: m=> [|m IH] /=; first by rewrite eq_axiomK /= compf1.
+rewrite compA IH /= -[LHS]compA -[RHS]compA; congr comp.
+move: (addnS m n) (addnS m.+1 n); rewrite -![_.+1 + _]/((_ + _).+1).
+(* FIXME: Why is this rewrite needed? *)
+rewrite -![m.+2 + _]/((_ + _).+2).
+move: (m + n.+1) (m + n).+1=> a b q.
+by case: b / q=> q /=; rewrite !eq_axiomK /= comp1f compf1.
 Qed.
+*)
 
-Definition app f x := obind f (retract (domm f) x).
+Fact chain_map_key : unit. Proof. exact: tt. Qed.
 
-Implicit Types fi gi hi : {f | saturated f}.
+Definition chain_map n m (nm : n <= m) : hom (X n) (X m) :=
+  locked_with
+    chain_map_key
+    (iso_of_eq (congr1 X (subnK nm)) ∘ chain_map_def _ _).
 
-Definition cont_appr fi gi :=
-  all (fun x => app (val fi) x ⊑ app (val gi) x)
-      (lub_closure (domm (val fi) :|: domm (val gi))).
-
-Lemma cont_apprP fi gi :
-  reflect (forall x, app (val fi) x ⊑ app (val gi) x) (cont_appr fi gi).
+Lemma chain_mapS n m (nm : n <= m) (nm1 : n <= m.+1) :
+  chain_map nm1 = f m ∘ chain_map nm.
 Proof.
-apply/(iffP allP)=> //; move=> efg x; rewrite /app.
-rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
-rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
-case e: (retract (_ :|: _) x)=> [x'|] //=.
-exact: (efg _ (retract_lub_closure e)).
+rewrite /chain_map !unlock.
+move: (subnK nm) (subnK nm1); rewrite (subSn nm) /=.
+move: {nm nm1} (m - n)=> o; rewrite -[o.+1 + n]/(o + n).+1 => e.
+by case: m / e => ?; rewrite eq_axiomK /= !comp1f.
 Qed.
 
-Lemma cont_apprPn fi gi :
-  reflect (exists x, app (val fi) x ⋢ app (val gi) x) (~~ cont_appr fi gi).
+Lemma chain_map0 n (nn : n <= n) : chain_map nn = 1.
 Proof.
-apply/(iffP allPn); first by case; eauto.
-case=> x; rewrite /app.
-rewrite -(retractS x (fsubsetUl (domm (val fi)) (domm (val gi)))).
-rewrite -(retractS x (fsubsetUr (domm (val fi)) (domm (val gi)))).
-case ex: (retract (domm (val fi) :|: domm (val gi)) x)=> [x'|] //=.
-move=> fg; exists x'=> //; exact: retract_lub_closure ex.
+rewrite /chain_map unlock; move: (subnK nn); rewrite subnn=> e.
+by rewrite eq_axiomK /= comp1f.
 Qed.
 
-Lemma cont_apprxx : reflexive cont_appr.
-Proof. by move=> fi; apply/cont_apprP=> x; rewrite apprxx. Qed.
+Lemma chain_map1 n (nSn : n <= n.+1) : chain_map nSn = f n.
+Proof. by rewrite (chain_mapS (leqnn n) nSn) chain_map0 compf1. Qed.
 
-Lemma cont_appr_trans : transitive cont_appr.
+Lemma chain_mapD n m o (nm : n <= m) (mo : m <= o) :
+  chain_map (@appr_trans _ _ m _ _ nm mo) = chain_map mo ∘ chain_map nm.
 Proof.
-move=> gi fi hi /cont_apprP fg /cont_apprP gh.
-apply/cont_apprP=> x; exact: appr_trans (fg x) (gh x).
+move: (mo) (appr_trans _ _); rewrite -(subnK mo) {mo}.
+elim: (o - m)=> {o} [|o IH] /=.
+  move=> mo no; rewrite /chain_map !unlock; move: (subnK mo).
+  rewrite -![0 + m]/(m) subnn => {mo} mo; rewrite eq_axiomK /= compf1.
+  by rewrite (eq_irrelevance no nm) comp1f.
+rewrite -![o.+1 + _]/(o + _).+1 => mo no.
+rewrite (chain_mapS (leq_trans nm (leq_addl o m)) no).
+rewrite (IH (leq_addl o m) (leq_trans nm (leq_addl o m))).
+by rewrite (chain_mapS (leq_addl o m) mo) compA.
 Qed.
 
-Lemma app_mono fi gi x1 x2 :
-  cont_appr fi gi -> x1 ⊑ x2 -> app (val fi) x1 ⊑ app (val gi) x2.
+Definition chain : {functor nat -> C} :=
+  @Functor _ _ X chain_map
+           (fun n => chain_map0 (apprxx n))
+           (fun n m p f g => chain_mapD g f).
+
+Lemma chain_coneP Y (g : forall n, hom (X n) Y) :
+  (forall n, g n = g n.+1 ∘ f n) ->
+  forall n m (nm : n <= m), g n = g m ∘ chain_map nm.
 Proof.
-rewrite /app => /cont_apprP figi x1x2.
-apply: (@appr_trans _ (obind (val fi) (retract (domm (val fi)) x2))).
-  move: (retract_mono (domm (val fi)) x1x2).
-  case e1: (retract (domm (val fi)) x1)=> [x1'|] //=.
-  case e2: (retract (domm (val fi)) x2)=> [x2'|] //=.
-  rewrite oapprE=> x1'x2'.
-  case/andP: (valP fi) => /eqP closed /monotonebP mono.
-  rewrite -closed in mono.
-  exact: mono (retract_lub_closure e1) (retract_lub_closure e2) x1'x2'.
-exact/figi.
+move=> /= gP n m nm; rewrite /chain_map !unlock.
+move: (m - n) (subnK nm)=> p e; case: m / e {nm}; rewrite comp1f.
+elim: p=> [|p IH] /=; first by rewrite compf1.
+by rewrite IH gP compA.
 Qed.
 
-Notation pcont_lub fi gi :=
-  (mkfmapfp (fun x => odflt None (app (val fi) x ⊔ app (val gi) x))
-            (lub_closure (domm (val fi) :|: domm (val gi)))).
+End NatFunctor.
 
-Definition cont_lub fi gi : option {f | saturated f} :=
-  if insub (pcont_lub fi gi) is Some hi then
-    if cont_appr fi hi && cont_appr gi hi then Some hi
-    else None
-  else None.
+Delimit Scope functor_scope with F.
 
-Lemma cont_lubP : QDom.axioms cont_appr cont_lub.
+Notation "⟨ f , g , .. , h ⟩" :=
+  (tupleF .. (tupleF f g) .. h)
+  (format "⟨ f ,  g ,  .. ,  h ⟩") : functor_scope.
+
+Notation "f + g" := (compF sumF ⟨f, g⟩%F) : functor_scope.
+
+Notation "f * g" := (compF prodF ⟨f, g⟩%F) : functor_scope.
+
+Notation "{ 'proj' f }" := (compF projF f) : functor_scope.
+
+Notation "f -> g" := (compF monoF ⟨f,g⟩%F) : functor_scope.
+
+Notation "{ 'forget' f }" := (compF forgetF f) : functor_scope.
+
+Section Recursive.
+
+Variable F : {functor finPDomType true -> finPDomType true}.
+
+Definition muX n := iter n F unit_finPDomType.
+
+Fixpoint muF n : hom (muX n) (muX n.+1) :=
+  match n with
+  | 0 => finPDom_bot
+  | n.+1 => fmap F (muF n)
+  end.
+
+Definition mu := colim (@chain _ muX muF).
+
+End Recursive.
+
+Section Universal.
+
+Definition univF : {functor finPDomType true -> finPDomType true} :=
+  compF optionF (compF forgetF {proj idF} +
+                 compF forgetF (idF -> idF) +
+                 compF forgetF (idF * idF) +
+                 (forgetF + forgetF) +
+                 constF _ unit_finDomType)%F.
+
+Definition univ := mu univF.
+
+
+
+Lemma down_comp
+  (C D : catType@{i j}) (X : nat -> C) (f : forall n, C (X n.+1) (X n))
+  (G : {functor C -> D}) n m (nm : n <= m) :
+  fmap G (down f nm) = down (fun n => fmap G (f n)) nm.
 Proof.
-split=> /=.
-- move=> fq; exact: cont_apprxx.
-- move=> gq fq hq; exact: cont_appr_trans.
-move=> fi gi hi; rewrite /cont_lub /=.
-set clos := lub_closure (domm (val fi) :|: domm (val gi)).
-set fg   := mkfmapfp _ clos.
-have e :
-  forall hi, fsubset (domm (val hi)) (domm (val fi) :|: domm (val gi)) ->
-  forall x, app (val hi) x = obind (app (val hi)) (retract clos x).
-  move=> hi' sub.
-  move: (fsubset_trans sub (lub_closure_ext _)) => {sub} sub x.
-  by rewrite /app -(retractS _ sub); case: (retract clos x).
-have ret_clos : forall x x', retract clos x = Some x' -> x' \in clos.
-  move=> x x' ex; move: (retract_lub_closure ex).
-  by rewrite lub_closure_idem => ->.
-move: {e} (e _ (fsubsetUl _ _)) (e _ (fsubsetUr _ _))=> fE gE.
-have [/allP coh|/allPn [x x_in incoh]] :=
-  boolP (all (fun x => app (val fi) x ⊔ app (val gi) x) clos).
-  have {coh} coh : forall x, app (val fi) x ⊔ app (val gi) x.
-    move=> x; rewrite fE gE; case ex: (retract clos x) => [x'|] //=.
-    apply: coh; rewrite /clos -lub_closure_idem.
-    by apply: retract_lub_closure ex.
-  have domm_fg : domm fg = clos.
-    apply/eq_fset=> x'; rewrite domm_mkfmapfp in_fset mem_filter andbC.
-    have [in_clos|] //= := boolP (x' \in lub_closure _).
-    move: (coh x').
-    case fi_x': (app (val fi) x')=> [y1|] //=;
-    case gi_x': (app (val gi) x')=> [y2|] //=.
-      by rewrite /lub /=; case: lub.
-    move: fi_x'; rewrite /app.
-    case e_fi_x': (retract (domm (val fi)) x')=> [x''|] //=.
-      move=> fi_x''; move: (retract_lub_closure e_fi_x').
-      case/andP: (valP fi)=> /eqP -> _.
-      by rewrite mem_domm fi_x''.
-    move=> _ _; move: gi_x'; rewrite /app.
-    case e_gi_x': (retract (domm (val gi)) x')=> [x''|] //=.
-      move=> gi_x''; move: (retract_lub_closure e_gi_x').
-      case/andP: (valP gi)=> /eqP ->.
-      by rewrite mem_domm gi_x''.
-    by move/retractK: in_clos; rewrite retractU e_fi_x' e_gi_x'.
-  have fgE : forall x, obind fg (retract clos x)
-                       = odflt None (app (val fi) x ⊔ app (val gi) x).
-    move=> x; rewrite fE gE; case ex: (retract clos x)=> [x'|] //=.
-    by rewrite mkfmapfpE (ret_clos _ _ ex).
-  have Pfg : (lub_closure (domm fg) == domm fg) && monotoneb fg.
-    rewrite domm_fg /clos lub_closure_idem eqxx /=.
-    apply/monotonebP=> x1 x2 in1 in2 x1x2; move: (fgE x1) (fgE x2) (in2).
-    rewrite {1 2}domm_fg in in1 in2.
-    rewrite mem_domm ?retractK ?lub_closure_idem //= => -> ->.
-    move: (coh x1) (coh x2).
-    case el1: (app (val fi) x1 ⊔ app (val gi) x1)=> [[l1|]|] //= _.
-    case el2: (app (val fi) x2 ⊔ app (val gi) x2)=> [[l2|]|] //= _.
-    move: (is_lub_lub (app (val fi) x1) (app (val gi) x1) (Some l2)).
-    rewrite el1 => <- => _; apply/andP; split.
-      exact: (appr_trans (app_mono (cont_apprxx fi) x1x2) (lub_apprL el2)).
-    exact: (appr_trans (app_mono (cont_apprxx gi) x1x2) (lub_apprR el2)).
-  rewrite insubT.
-  set fgi : {f | saturated f} := Sub fg Pfg.
-  have {fgE} fgE : forall x, app (val fgi) x =
-                             odflt None (app (val fi) x ⊔ app (val gi) x).
-    by move=> x; rewrite {1}/app /= domm_fg.
-  move: fgi fgE => /= {fg Pfg domm_fg} fgi fgiE.
-  have -> /= : cont_appr fi fgi && cont_appr gi fgi.
-    apply/andP; split.
-      apply/cont_apprP=> x; rewrite fgiE fE gE.
-      case ex: (retract clos x)=> [x'|] //=.
-      move: (coh x').
-      case ey: lub=> [y|] //= _.
-      exact: (lub_apprL ey).
-    apply/cont_apprP=> x; rewrite fgiE fE gE.
-    case ex: (retract clos x)=> [x'|] //=.
-    move: (coh x').
-    case ey: lub=> [y|] //= _.
-    exact: (lub_apprR ey).
-  apply/(sameP andP)/(iffP (cont_apprP _ _)).
-    move=> fgi_hi; split; apply/allP=> x in_clos.
-      move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-      move: (fgi_hi x) (coh x); rewrite fgiE.
-      by case: lub=> /= [y|] // -> _ /andP [].
-    move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-    move: (fgi_hi x) (coh x); rewrite fgiE.
-    by case: lub=> /= [y|] // -> _ /andP [].
-  case=> /cont_apprP fi_hi /cont_apprP gi_hi x; rewrite fgiE; move: (coh x).
-  move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi) x)).
-  by rewrite fi_hi gi_hi /=; case: lub.
-have {incoh} incoh : forall hi', ~~ (cont_appr fi hi' && cont_appr gi hi').
-  move=> hi'; apply: contra incoh => /andP [/cont_apprP fiP /cont_apprP giP].
-  move: (is_lub_lub (app (val fi) x) (app (val gi) x) (app (val hi') x)).
-  by rewrite fiP giP; case: lub.
-rewrite (negbTE (incoh hi)); case: insubP=> /= [fgi inc|] //.
-by rewrite (negbTE (incoh fgi)).
+move: (nm); rewrite -(subnK nm); elim: (m - n)=> {m nm} [|m IH].
+  by move=> ?; rewrite !down0 fmap1.
+change (m.+1 + n) with (m + n).+1 => nm.
+by rewrite !(downS _ (leq_addl m n)) fmapD IH.
 Qed.
 
-Canonical cont_predom := Eval hnf in QDom.PreDom cont_lubP.
+Lemma down_comp_cone
+  (C D : catType@{i j}) (X : nat -> C) (f : forall n, C (X n.+1) (X n))
+  Y (g : forall n, C Y (X n)) (gP : forall n, g n = f n ∘ g n.+1)
+  (F : {functor C -> D}) :
+  forall n, fmap F (g n) = fmap F (f n) ∘ fmap F (g n.+1).
+Proof. by move=> n; rewrite -fmapD gP. Qed.
 
-(* FIXME: Using a regular definition here makes it harder for Coq to figure out
-   that the coercion into functions below is valid. *)
+Arguments down_comp_cone {_ _ _} _ {_} _ _ _ _.
 
-Record type (p : phant (T -> S)) := Cont {
-  quot_of_cont : {qdom cont_appr}
-}.
-
-End Def.
-
-Module Exports.
-
-Notation "{ 'cont' T }" := (Cont.type (Phant T))
-  (at level 0, format "{ 'cont'  T }") : type_scope.
-
-Section WithVar.
-
-Variables T S : domType.
-
-Canonical cont_newType :=
-  Eval hnf in [newType for @Cont.quot_of_cont _ _ (Phant (T -> S))].
-Definition cont_eqMixin :=
-  [eqMixin of {cont T -> S} by <:].
-Canonical cont_eqType :=
-  Eval hnf in EqType {cont T -> S} cont_eqMixin.
-Definition cont_choiceMixin :=
-  [choiceMixin of {cont T -> S} by <:].
-Canonical cont_choiceType :=
-  Eval hnf in ChoiceType {cont T -> S} cont_choiceMixin.
-Definition cont_ordMixin :=
-  [ordMixin of {cont T -> S} by <:].
-Canonical cont_ordType :=
-  Eval hnf in OrdType {cont T -> S} cont_ordMixin.
-Canonical cont_subDomType :=
-  Eval hnf in SubDomType {cont T -> S} (fun _ _ _ _ _ _ => erefl).
-Definition cont_domMixin :=
-  [domMixin of {cont T -> S} by <:].
-Canonical cont_domType :=
-  Eval hnf in DomType {cont T -> S} cont_domMixin.
-
-End WithVar.
-
-End Exports.
-
-End Cont.
-
-Export Cont.Exports.
-
-Definition cont_app T S p (f : @Cont.type T S p) x : option S :=
-  Cont.app (val (repr (Cont.quot_of_cont f))) x.
-
-Coercion cont_app : Cont.type >-> Funclass.
-
-Section ContDom.
-
-Local Open Scope quotient_scope.
-
-Variables T S : domType.
-Implicit Types f g fg : {cont T -> S}.
-Implicit Types (x y : T).
-
-Definition fmap_of_cont f : {fmap T -> S} :=
-  val (repr (Cont.quot_of_cont f)).
-
-Definition Cont (h : {fmap T -> S}) : {cont T -> S} :=
-  if insub h is Some hi then Cont.Cont _ (\pi hi)
-  else Cont.Cont (Phant (T -> S)) (\pi (Sub emptym (Cont.saturated0 _ _))).
-
-Lemma cont_appE f x :
-  f x = obind (fmap_of_cont f) (retract (domm (fmap_of_cont f)) x).
-Proof. by []. Qed.
-
-Lemma cont_appEin f x :
-  x \in domm (fmap_of_cont f) -> f x = fmap_of_cont f x.
-Proof.
-move=> xin; rewrite cont_appE retractK //.
-move: x xin; exact/fsubsetP/lub_closure_ext.
-Qed.
-
-Lemma fmap_of_contK : cancel fmap_of_cont Cont.
-Proof.
-case=> f; rewrite /fmap_of_cont /Cont -[f in RHS]reprK /=.
-by case: (repr f)=> {f} f fP; rewrite insubT.
-Qed.
-
-Lemma fmap_of_contP f : Cont.saturated (fmap_of_cont f).
-Proof. exact: valP. Qed.
-
-Lemma cont_apprP f g : reflect (forall x, f x ⊑ g x) (f ⊑ g).
-Proof. exact/Cont.cont_apprP. Qed.
-
-Lemma cont_app_mono f g x y : f ⊑ g -> x ⊑ y -> f x ⊑ g y.
-Proof. exact/Cont.app_mono. Qed.
-
-Lemma eq_cont f g : f =1 g <-> f = g.
-Proof.
-split; last by move=> ->.
-by move=> fg; apply/anti_appr/andP; split; apply/cont_apprP=> x;
-rewrite fg apprxx.
-Qed.
-
-Lemma ContE h x :
-  Cont.saturated h ->
-  Cont h x = obind h (retract (domm h) x).
-Proof.
-rewrite /Cont=> h_sat; rewrite insubT /= /cont_app /=.
-case: piP=> h' /eqmodP /andP [/Cont.cont_apprP e1 /Cont.cont_apprP e2].
-by apply/anti_appr; rewrite e1 e2.
-Qed.
-
-Definition cont0 := Cont emptym.
-
-Lemma cont0E x : cont0 x = None.
-Proof.
-by rewrite /cont0 ContE ?Cont.saturated0 // domm0 retract0.
-Qed.
-
-Definition cont1 x z := Cont (setm emptym x z).
-
-Lemma cont1E x z y : cont1 x z y = if x ⊑ y then Some z else None.
-Proof.
-rewrite /cont1 ContE ?Cont.saturated1 //.
-rewrite domm_set domm0 fsetU0 retract1.
-by case: ifP=> _ //=; rewrite setmE eqxx.
-Qed.
-
-End ContDom.
-
-Arguments cont_apprP {_ _} [_ _].
-
-Section ContMapping.
-
-Variables T1 T2 S1 S2 : domType.
-Implicit Types (f : T1 -> T2) (g : S1 -> S2) (h : {cont T1 -> S1}).
-Implicit Types (x : T1).
-
-Definition mapc f g h : {cont T2 -> S2} :=
-  Cont (mapm2 f g (fmap_of_cont h)).
-
-Lemma mapm2_saturated f g (h : {fmap T1 -> S1}) :
-  injective f -> lub_preserving f -> monotone g ->
-  Cont.saturated h -> Cont.saturated (mapm2 f g h).
-Proof.
-move=> f_inj f_lub g_mono /andP [h_lub h_mono].
-rewrite /Cont.saturated domm_map2 mapm2_mono2 //; last exact: inj_iso.
-by rewrite lub_closure_imfset // (eqP h_lub) eqxx.
-Qed.
-
-Lemma mapcE f g h x :
-  injective f -> lub_preserving f -> monotone g ->
-  mapc f g h (f x) = omap g (h x).
-Proof.
-move=> f_inj f_lub g_mono; rewrite /mapc.
-rewrite -[h in RHS]fmap_of_contK [in RHS]ContE; last exact: fmap_of_contP.
-move: (fmap_of_cont h) (fmap_of_contP h)=> {h} h hP.
-rewrite ContE; last exact: mapm2_saturated.
-rewrite domm_map2 retract_imfset //.
-case: (retract (domm h) x)=> {x} [x|] //=; by rewrite mapm2E.
-Qed.
-
-Lemma mapc_mono f g :
-  injective f -> lub_preserving f -> monotone g ->
-  monotone (mapc f g).
-Proof.
-move=> f_inj f_lub g_mono h1 h2 h1h2; apply/cont_apprP=> x2.
-rewrite {1}/mapc ContE; try exact: mapm2_saturated (fmap_of_contP _).
-rewrite domm_map2; case ex2': (retract _ _)=> [x2'|//] /=.
-move: (retract_lub_closure ex2'); rewrite lub_closure_imfset //.
-case/andP: (fmap_of_contP h1)=> /eqP -> _ x2'in.
-case/imfsetP: x2'in ex2'=> {x2'} x1 x1in -> ex2'.
-move/cont_apprP/(_ x1): h1h2; rewrite mapm2E -?cont_appEin //.
-case: (h1 x1)=> [y1|//] /=.
-rewrite cont_appE; case ex1': (retract _ _)=> [x1'|//] /=.
-have efx1': retract (f @: domm (fmap_of_cont h2)) (f x1) = Some (f x1').
-  by rewrite retract_imfset // ex1'.
-have fx1_x2: f x1 ⊑ x2.
-  by move: (retract_appr (f @: domm (fmap_of_cont h1)) x2); rewrite ex2'.
-move: (retract_mono (f @: (domm (fmap_of_cont h2))) fx1_x2); rewrite efx1'.
-case: (retract _ _) (retract_appr (f @: domm (fmap_of_cont h2)) x2)=> // x2'.
-move=> x2'_x2 fx1'_x2' y1_x1'.
-have: mapc f g h2 (f x1') ⊑ mapc f g h2 x2.
-  rewrite cont_app_mono ?apprxx //.
-  exact: appr_trans fx1'_x2' x2'_x2.
-apply: appr_trans; rewrite mapcE // cont_appE retractK /=; last first.
-  apply: retract_lub_closure ex1'.
-case: (fmap_of_cont h2 x1') y1_x1'=> [y2|//] /=; exact: g_mono.
-Qed.
-
-End ContMapping.
-
-Section MemoryDef.
-
-Variable T : Type.
-
-CoInductive memory := Memory of {fmap name -> T}.
-
-Definition fmap_of_memory (m : memory) := let: Memory m := m in m.
-
-Canonical memory_newType := [newType for fmap_of_memory].
-
-End MemoryDef.
-
-Definition load (T : Type) (m : memory T) (n : name) := val m n.
-Coercion load : memory >-> Funclass.
-
-Definition memory_eqMixin (T : eqType) :=
-  [eqMixin of memory T by <:].
-Canonical memory_eqType (T : eqType) :=
-  Eval hnf in EqType (memory T) (memory_eqMixin T).
-Definition memory_choiceMixin (T : choiceType) :=
-  [choiceMixin of memory T by <:].
-Canonical memory_choiceType (T : choiceType) :=
-  Eval hnf in ChoiceType (memory T) (memory_choiceMixin T).
-Definition memory_ordMixin (T : ordType) :=
-  [ordMixin of memory T by <:].
-Canonical memory_ordType (T : ordType) :=
-  Eval hnf in OrdType (memory T) (memory_ordMixin T).
-
-Section MemoryDom.
-
-Variable T : domType.
-
-Implicit Types m : memory T.
-
-Definition memory_appr m1 m2 :=
-  [&& domm (val m1) == domm (val m2) & val m1 ⊑ val m2].
-
-Definition memory_lub m1 m2 :=
-  if domm (val m1) == domm (val m2) then
-    omap (@Memory _) (val m1 ⊔ val m2)
-  else None.
-
-Lemma memory_lubP : Dom.axioms memory_appr memory_lub.
-Proof.
-rewrite /memory_appr /memory_lub; split.
-- by move=> m; rewrite eqxx apprxx.
-- move=> m2 m1 m3 /andP [/eqP -> H12] /andP [->] /=.
-  exact: appr_trans H12.
-- move=> m1 m2 /andP [/andP [_ H12] /andP [_ H21]].
-  by apply/val_inj/anti_appr/andP; split.
-move=> m1 m2 m3; case: ifP=> [/eqP e12|ne12]; last first.
-  by case: eqP => [<-|//]; rewrite eq_sym ne12 /= andbF.
-rewrite -e12; move: (is_lub_lub (val m1) (val m2) (val m3)).
-case: (altP (_ =P _)) => [e13 ->|ne13].
-  case lub12: (val m1 ⊔ val m2)=> [m12|] //=.
-  by rewrite (domm_lub lub12) -e12 fsetUid e13 eqxx.
-case lub12: (val m1 ⊔ val m2)=> [m12|] //=.
-by rewrite (domm_lub lub12) -e12 fsetUid (negbTE ne13).
-Qed.
-
-Definition memory_domMixin := DomMixin memory_lubP.
-Canonical memory_domType := Eval hnf in DomType (memory T) memory_domMixin.
-
-End MemoryDom.
 
 (* FIXME: These probably belong somewhere else *)
 
