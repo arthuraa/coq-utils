@@ -3418,6 +3418,8 @@ Notation "f -> g" := (compF monoF ⟨f,g⟩%F) : functor_scope.
 
 Notation "{ 'forget' f }" := (compF forgetF f) : functor_scope.
 
+Notation "'X" := idF : functor_scope.
+
 Section Recursive.
 
 Variable F : {functor finPDomType true -> finPDomType true}.
@@ -3437,10 +3439,10 @@ End Recursive.
 Section Universal.
 
 Definition univF : {functor finPDomType true -> finPDomType true} :=
-  compF optionF (compF forgetF {proj idF} +
-                 compF forgetF (idF -> idF) +
-                 compF forgetF (idF * idF) +
-                 (forgetF + forgetF) +
+  compF optionF ({forget {proj 'X}} +
+                 {forget 'X -> 'X} +
+                 {forget 'X * 'X} +
+                 ({forget 'X} + {forget 'X}) +
                  constF _ unit_finDomType)%F.
 
 Definition univ := mu univF.
