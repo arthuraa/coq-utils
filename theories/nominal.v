@@ -147,21 +147,21 @@ Record mixin_of T := Mixin {
 Record class_of T := Class {base : Ord.class_of T; mixin : mixin_of T}.
 Local Coercion base : class_of >-> Ord.class_of.
 
-Structure type := Pack {sort; _ : class_of sort; _ : Type}.
+Structure type := Pack {sort; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
 Variables (T : Type) (cT : type).
-Definition class := let: Pack _ c _ as cT' := cT return class_of cT' in c.
-Definition clone c of phant_id class c := @Pack T c T.
-Let xT := let: Pack T _ _ := cT in T.
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
 Definition pack m :=
-  fun b bT & phant_id (Ord.class bT) b => Pack (@Class T b m) T.
+  fun b bT & phant_id (Ord.class bT) b => Pack (@Class T b m).
 
 (* Inheritance *)
-Definition eqType := @Equality.Pack cT xclass xT.
-Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Pack cT xclass xT.
+Definition eqType := @Equality.Pack cT xclass.
+Definition choiceType := @Choice.Pack cT xclass.
+Definition ordType := @Ord.Pack cT xclass.
 
 End ClassDef.
 
@@ -517,26 +517,26 @@ Definition DefMixin :=
 End Mixins.
 
 Record class_of T :=
-  Class {base : Nominal.class_of T; mixin : mixin_of (Nominal.Pack base T)}.
+  Class {base : Nominal.class_of T; mixin : mixin_of (Nominal.Pack base)}.
 Local Coercion base : class_of >-> Nominal.class_of.
 
-Structure type := Pack {sort; _ : class_of sort; _ : Type}.
+Structure type := Pack {sort; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
 Variables (T : Type) (cT : type).
-Definition class := let: Pack _ c _ as cT' := cT return class_of cT' in c.
-Definition clone c of phant_id class c := @Pack T c T.
-Let xT := let: Pack T _ _ := cT in T.
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
-Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0 T)) :=
+Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0)) :=
   fun bT b & phant_id (Nominal.class bT) b =>
-  fun    m & phant_id m0 m => Pack (@Class T b m) T.
+  fun    m & phant_id m0 m => Pack (@Class T b m).
 
 (* Inheritance *)
-Definition eqType := @Equality.Pack cT xclass xT.
-Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Pack cT xclass xT.
-Definition nominalType := @Nominal.Pack cT xclass xT.
+Definition eqType := @Equality.Pack cT xclass.
+Definition choiceType := @Choice.Pack cT xclass.
+Definition ordType := @Ord.Pack cT xclass.
+Definition nominalType := @Nominal.Pack cT xclass.
 
 End ClassDef.
 
@@ -953,7 +953,7 @@ Lemma fset_namesNNE n n' X :
 Proof.
 move=> Pn Pn'; rewrite -[in RHS](imfset_id X).
 apply: eq_in_imfset=> x x_in; apply: renameJ.
-apply/fdisjointP=> n'' /(fsubsetP _ _ (fsubset_supp_fperm2 n n')).
+apply/fdisjointP=> n'' /(fsubsetP (fsubset_supp_fperm2 n n')).
 have sub: fsubset (names x) (fset_names X).
   case/seq_tnthP: x_in=> [/= i ->]; rewrite /fset_names big_tnth.
   by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
@@ -1163,7 +1163,7 @@ Let fmap_names_dom s m :
   domm (fmap_rename s m) = rename s @: domm m.
 Proof.
 apply/eq_fset=> x; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
-apply/(sameP (dommP _ _))/(iffP (dommP _ _)).
+apply/(sameP dommP)/(iffP dommP).
   move=> [y Py]; exists (rename s y); rewrite mkfmapfpE.
   by rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)) mem_domm Py /=.
 case=> [y]; rewrite mkfmapfpE (mem_imfset_can _ _ (renameK _) (renameKV _)).
@@ -1175,7 +1175,7 @@ Let fmap_names_codom s m :
   codomm (fmap_rename s m) = rename s @: codomm m.
 Proof.
 apply/eq_fset=> y; rewrite (mem_imfset_can _ _ (renameK _) (renameKV _)).
-apply/(sameP (codommP _ _))/(iffP (codommP _ _)).
+apply/(sameP codommP)/(iffP codommP).
   move=> [x Px]; exists (rename s x); rewrite mkfmapfpE.
   rewrite (mem_imfset_inj _ _ (@rename_inj _ _)) mem_domm Px /= renameK Px.
   by rewrite renameoE /= renameKV.
@@ -1959,26 +1959,26 @@ Record mixin_of (T : nominalType) := Mixin {
 }.
 
 Record class_of T :=
-  Class {base : Nominal.class_of T; mixin : mixin_of (Nominal.Pack base T)}.
+  Class {base : Nominal.class_of T; mixin : mixin_of (Nominal.Pack base)}.
 Local Coercion base : class_of >-> Nominal.class_of.
 
-Structure type := Pack {sort; _ : class_of sort; _ : Type}.
+Structure type := Pack {sort; _ : class_of sort}.
 Local Coercion sort : type >-> Sortclass.
 Variables (T : Type) (cT : type).
-Definition class := let: Pack _ c _ as cT' := cT return class_of cT' in c.
-Definition clone c of phant_id class c := @Pack T c T.
-Let xT := let: Pack T _ _ := cT in T.
+Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
+Definition clone c of phant_id class c := @Pack T c.
+Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
-Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0 T)) :=
+Definition pack b0 (m0 : mixin_of (@Nominal.Pack T b0)) :=
   fun bT b & phant_id (Nominal.class bT) b =>
-  fun    m & phant_id m0 m => Pack (@Class T b m) T.
+  fun    m & phant_id m0 m => Pack (@Class T b m).
 
 (* Inheritance *)
-Definition eqType := @Equality.Pack cT xclass xT.
-Definition choiceType := @Choice.Pack cT xclass xT.
-Definition ordType := @Ord.Pack cT xclass xT.
-Definition nominalType := @Nominal.Pack cT xclass xT.
+Definition eqType := @Equality.Pack cT xclass.
+Definition choiceType := @Choice.Pack cT xclass.
+Definition ordType := @Ord.Pack cT xclass.
+Definition nominalType := @Nominal.Pack cT xclass.
 
 End ClassDef.
 

@@ -469,7 +469,7 @@ Section FixLength.
 Variable ks : seq nat.
 
 Definition wunpack (w : word (sumn ks)) : hseq word ks :=
-  let word_of_tuple k t' :=
+  let word_of_tuple k (t' : k.-tuple bool) :=
       word_of_bits [ffun i : 'I_k => tnth t' (rev_ord i)] in
   let t := [tuple bits_of_word w (rev_ord i) | i < sumn ks] in
   hmap word_of_tuple (split_tuple t).

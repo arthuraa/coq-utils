@@ -20,15 +20,11 @@ with structure).
 
 ## Installation
 
-The package currently needs to be compiled by hand.  It requires Coq v8.6 -
-v8.8, as well as the following [OPAM][5] packages:
+The package currently needs to be compiled by hand.  It requires Coq v8.9 as
+well as the following [OPAM][5] packages:
 
-- `coq-mathcomp-ssreflect`, >= v1.6
-- `coq-mathcomp-fingroup`, >= v1.6
-- `coq-mathcomp-algebra`, >= v1.6
-
-Additionally, you'll need the development version of Extensional Structures,
-available at https://github.com/arthuraa/extructures (at least commit 4d29a4d6).
+- `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra` v1.9
+- `coq-extructures` v0.2
 
 To compile the package, simply run
 
