@@ -134,14 +134,18 @@ Section ClassDef.
 Local Open Scope fset_scope.
 Local Open Scope fperm_scope.
 
-Record mixin_of T := Mixin {
-  rename : {fperm name} -> T -> T;
-  names : T -> {fset name};
+Record axioms T (rename : {fperm name} -> T -> T) (names : T -> {fset name}) := Axioms {
   _ : forall s1 s2 x, rename s1 (rename s2 x) = rename (s1 * s2) x;
   _ : forall n n' x,
         n \notin names x -> n' \notin names x -> rename (fperm2 n n') x = x;
   _ : forall n n' x,
         n \in names x -> rename (fperm2 n n') x = x -> n' \in names x
+}.
+
+Record mixin_of T := Mixin {
+  rename : {fperm name} -> T -> T;
+  names : T -> {fset name};
+  _ : axioms rename names
 }.
 
 Record class_of T := Class {base : Ord.class_of T; mixin : mixin_of T}.
@@ -206,16 +210,16 @@ Variable T : nominalType.
 Implicit Types (s : {fperm name}) (x : T).
 
 Lemma renameD s1 s2 x : rename s1 (rename s2 x) = rename (s1 * s2) x.
-Proof. by case: T s1 s2 x=> [? [? []] ?]. Qed.
+Proof. by case: T s1 s2 x=> [? [? [?? []]] ?]. Qed.
 
 Lemma namesTeq n n' x :
   n \in names x -> rename (fperm2 n n') x = x -> n' \in names x.
-Proof. by case: T n n' x=> [? [? []] ?]. Qed.
+Proof. by case: T n n' x=> [? [? [?? []]] ?]. Qed.
 
 Lemma namesNNE n n' x :
   n \notin names x -> n' \notin names x ->
   rename (fperm2 n n') x = x.
-Proof. by case: T n n' x=> [? [? []] ?]. Qed.
+Proof. by case: T n n' x=> [? [? [?? []]] ?]. Qed.
 
 Lemma mem_names n x (X : {fset name}) :
   (forall n', n' \notin X -> rename (fperm2 n n') x != x) ->
@@ -321,27 +325,17 @@ Definition name_rename s n := s n.
 
 Definition name_names n := fset1 n.
 
-Lemma name_renameD s1 s2 x :
-  name_rename s1 (name_rename s2 x) = name_rename (s1 * s2) x.
-Proof. by rewrite /name_rename /= fpermM. Qed.
-
-Lemma name_namesNNE n n' n'' :
-  n \notin name_names n'' -> n' \notin name_names n'' ->
-  name_rename (fperm2 n n') n'' = n''.
+Lemma name_nominalAxioms : Nominal.axioms name_rename name_names.
 Proof.
-by rewrite /name_names /name_rename !in_fset1 !(eq_sym _ n''); apply: fperm2D.
+split.
+- move=> s1 s2 n; by rewrite /name_rename /= fpermM.
+- move=> n n' n''.
+  rewrite /name_names /name_rename !in_fset1 !(eq_sym _ n''); exact: fperm2D.
+- move=> n n' n''; rewrite /name_rename /name_names=> /fset1P <-{n''}.
+  by rewrite in_fset1 fperm2L=> ->.
 Qed.
 
-Lemma name_namesTeq n n' n'' :
-  n \in name_names n'' -> name_rename (fperm2 n n') n'' = n'' ->
-  n' \in name_names n''.
-Proof.
-rewrite /name_rename /name_names=> /fset1P <-{n''}; rewrite in_fset1.
-by rewrite fperm2L=> ->.
-Qed.
-
-Definition name_nominalMixin :=
-  NominalMixin name_renameD name_namesNNE name_namesTeq.
+Definition name_nominalMixin := NominalMixin name_nominalAxioms.
 Canonical name_nominalType := Eval hnf in NominalType name name_nominalMixin.
 
 Lemma renamenE s n : rename s n = s n. Proof. by []. Qed.
@@ -493,23 +487,10 @@ Definition trivial_rename s x := x.
 
 Definition trivial_names x := fset0 : {fset name}.
 
-Lemma trivial_renameD s1 s2 x :
-  trivial_rename s1 (trivial_rename s2 x) = trivial_rename (s1 * s2) x.
-Proof. by []. Qed.
+Lemma trivial_nominalAxioms : Nominal.axioms trivial_rename trivial_names.
+Proof. by split. Qed.
 
-Lemma trivial_namesNNE n n' x :
-  n \notin trivial_names x -> n' \notin trivial_names x ->
-  trivial_rename (fperm2 n n') x = x.
-Proof. by []. Qed.
-
-Lemma trivial_namesTeq n n' x :
-  n \in trivial_names x ->
-  trivial_rename (fperm2 n n') x = x ->
-  n' \in trivial_names x.
-Proof. by []. Qed.
-
-Definition DefNominalMixin :=
-  NominalMixin trivial_renameD trivial_namesNNE trivial_namesTeq.
+Definition DefNominalMixin := NominalMixin trivial_nominalAxioms.
 
 Definition DefMixin :=
   @Mixin (NominalType T DefNominalMixin) (fun _ _ => erefl).
@@ -642,32 +623,17 @@ Definition prod_rename s p := (rename s p.1, rename s p.2).
 
 Definition prod_names p := names p.1 :|: names p.2.
 
-Lemma prod_renameD s1 s2 p :
-  prod_rename s1 (prod_rename s2 p) = prod_rename (s1 * s2) p.
+Lemma prod_nominalAxioms : Nominal.axioms prod_rename prod_names.
 Proof.
-by case: p => [x y]; rewrite /prod_rename /= !renameD.
+split.
+- move=> ??; by case=> [x y]; rewrite /prod_rename /= !renameD.
+- move=> ?? [x y] /=; rewrite /prod_rename/prod_names /= 2!in_fsetU 2!negb_or.
+  by move=> /andP [??] /andP [??]; rewrite 2?namesNNE.
+- move=> ?? [x y]; rewrite /prod_names !in_fsetU /prod_rename /=.
+  by case/orP=> ? [??]; apply/orP; eauto using namesTeq.
 Qed.
 
-Lemma prod_namesNNE n n' p :
-  n \notin prod_names p -> n' \notin prod_names p ->
-  prod_rename (fperm2 n n') p = p.
-Proof.
-by case: p=> x y /=; rewrite /prod_rename/prod_names /= 2!in_fsetU 2!negb_or=>
-  /andP [??] /andP [??]; rewrite 2?namesNNE.
-Qed.
-
-Lemma prod_namesTeq n n' p :
-  n \in prod_names p ->
-  prod_rename (fperm2 n n') p = p ->
-  n' \in prod_names p.
-Proof.
-by case: p=> [x y]; rewrite /prod_names !in_fsetU /prod_rename /=
-  => /orP /= [h_in|h_in] [??]; apply/orP; [left|right];
-eauto using namesTeq.
-Qed.
-
-Definition prod_nominalMixin :=
-  NominalMixin prod_renameD prod_namesNNE prod_namesTeq.
+Definition prod_nominalMixin := NominalMixin prod_nominalAxioms.
 Canonical prod_nominalType :=
   Eval hnf in NominalType (T' * S') prod_nominalMixin.
 
@@ -694,38 +660,28 @@ Definition seq_rename s xs := map (rename s) xs.
 
 Definition seq_names xs := \bigcup_(x <- xs) names x.
 
-Lemma seq_renameD s1 s2 xs :
-  seq_rename s1 (seq_rename s2 xs) = seq_rename (s1 * s2) xs.
-Proof. by rewrite /seq_rename -map_comp (eq_map (@renameD T' s1 s2)). Qed.
-
-Lemma seq_namesNNE n n' xs :
-  n \notin seq_names xs -> n' \notin seq_names xs ->
-  seq_rename (fperm2 n n') xs = xs.
+Lemma seq_nominalAxioms : Nominal.axioms seq_rename seq_names.
 Proof.
-move=> h1 h2.
-have h: forall n x, n \notin seq_names xs -> x \in xs -> n \notin names x.
-  move=> {n n' h1 h2} n x Pn /seq_tnthP [i ->]; apply: contra Pn.
-  rewrite /seq_names big_tnth; move: n; apply/fsubsetP.
-  apply/bigcup_sup=> //; exact: mem_index_enum.
-rewrite /seq_rename -[in RHS](map_id xs); apply/eq_in_map=> x Px.
-by apply namesNNE; eauto.
+split.
+- move=> s1 s2 ?.
+  by rewrite /seq_rename -map_comp (eq_map (@renameD T' s1 s2)).
+- move=> n n' xs h1 h2.
+  have h: forall n x, n \notin seq_names xs -> x \in xs -> n \notin names x.
+    move=> {n n' h1 h2} n x Pn /seq_tnthP [i ->]; apply: contra Pn.
+    rewrite /seq_names big_tnth; move: n; apply/fsubsetP.
+    apply/bigcup_sup=> //; exact: mem_index_enum.
+  rewrite /seq_rename -[in RHS](map_id xs); apply/eq_in_map=> x Px.
+  by apply namesNNE; eauto.
+- move=> n n' xs.
+  rewrite /seq_names big_tnth => /bigcup_finP [i _ Pin e].
+  suff e': rename (fperm2 n n') (tnth (in_tuple xs) i) = tnth (in_tuple xs) i.
+    move: {e e'} n' (namesTeq Pin e'); apply/fsubsetP.
+    apply/bigcup_sup=> //; exact: mem_index_enum.
+  rewrite (tnth_nth (tnth (in_tuple xs) i)) /=.
+  by move: {Pin} i (tnth _ _)=> [i Pi] /= x; rewrite -{2}e {e} (nth_map x).
 Qed.
 
-Lemma seq_namesTeq n n' xs :
-  n \in seq_names xs ->
-  seq_rename (fperm2 n n') xs = xs ->
-  n' \in seq_names xs.
-Proof.
-rewrite /seq_names big_tnth => /bigcup_finP [i _ Pin e].
-suff e': rename (fperm2 n n') (tnth (in_tuple xs) i) = tnth (in_tuple xs) i.
-  move: {e e'} n' (namesTeq Pin e'); apply/fsubsetP.
-  apply/bigcup_sup=> //; exact: mem_index_enum.
-rewrite (tnth_nth (tnth (in_tuple xs) i)) /=.
-by move: {Pin} i (tnth _ _)=> [i Pi] /= x; rewrite -{2}e {e} (nth_map x).
-Qed.
-
-Definition seq_nominalMixin :=
-  NominalMixin seq_renameD seq_namesNNE seq_namesTeq.
+Definition seq_nominalMixin := NominalMixin seq_nominalAxioms.
 Canonical seq_nominalType := Eval hnf in NominalType (seq T') seq_nominalMixin.
 
 Lemma renamesE s xs : rename s xs = [seq rename s x | x <- xs].
@@ -820,23 +776,15 @@ Definition sum_names x :=
   | inr x => names x
   end.
 
-Lemma sum_renameD s1 s2 x :
-  sum_rename s1 (sum_rename s2 x) = sum_rename (s1 * s2) x.
-Proof. by case: x=> [x|x] //=; rewrite renameD. Qed.
+Lemma sum_nominalAxioms : Nominal.axioms sum_rename sum_names.
+Proof.
+split.
+- by move=> ?? [] x //=; rewrite renameD.
+- by move=> ?? [] x //= => /namesNNE h /h ->.
+- by move=> ?? [] x /namesTeq Pin [/Pin ?].
+Qed.
 
-Lemma sum_namesNNE n n' x :
-  n \notin sum_names x -> n' \notin sum_names x ->
-  sum_rename (fperm2 n n') x = x.
-Proof. by case: x=> [x|x] //= => /namesNNE h /h ->. Qed.
-
-Lemma sum_namesTeq n n' x :
-  n \in sum_names x ->
-  sum_rename (fperm2 n n') x = x ->
-  n' \in sum_names x.
-Proof. by case: x=> [x|x] /namesTeq Pin [/Pin ?]. Qed.
-
-Definition sum_nominalMixin :=
-  NominalMixin sum_renameD sum_namesNNE sum_namesTeq.
+Definition sum_nominalMixin := NominalMixin sum_nominalAxioms.
 Canonical sum_nominalType := Eval hnf in NominalType (T + S) sum_nominalMixin.
 
 End SumNominalType.
@@ -870,7 +818,7 @@ Lemma option_namesTeq n n' x :
 Proof. by case: x=> [x /namesTeq P [/P e]|]. Qed.
 
 Definition option_nominalMixin :=
-  NominalMixin option_renameD option_namesNNE option_namesTeq.
+  NominalMixin (Nominal.Axioms option_renameD option_namesNNE option_namesTeq).
 Canonical option_nominalType :=
   Eval hnf in NominalType (option S') option_nominalMixin.
 
@@ -976,7 +924,7 @@ by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
 Qed.
 
 Definition fset_nominalMixin :=
-  NominalMixin fset_renameD fset_namesNNE fset_namesTeq.
+  NominalMixin (Nominal.Axioms fset_renameD fset_namesNNE fset_namesTeq).
 Canonical fset_nominalType :=
   Eval hnf in NominalType (FSet.fset_type T') fset_nominalMixin.
 Canonical fset_of_nominalType := Eval hnf in [nominalType of {fset T'}].
@@ -1198,12 +1146,11 @@ by rewrite fmap_names_codom names_rename.
 Qed.
 
 Definition fmap_nominalMixin :=
-  NominalMixin fmap_renameD fmap_namesNNE fmap_namesTeq.
+  NominalMixin (Nominal.Axioms fmap_renameD fmap_namesNNE fmap_namesTeq).
 Canonical fmap_nominalType :=
   Eval hnf in NominalType (FMap.fmap_type T S) fmap_nominalMixin.
 Canonical fmap_of_nominalType :=
   Eval hnf in [nominalType of {fmap T -> S}].
-
 
 Lemma namesmE m : names m = names (domm m) :|: names (codomm m).
 Proof. by []. Qed.
@@ -1462,7 +1409,7 @@ by apply: namesTeq.
 Qed.
 
 Definition nominalMixin :=
-  NominalMixin subType_renameD subType_namesNNE subType_namesTeq.
+  NominalMixin (Nominal.Axioms subType_renameD subType_namesNNE subType_namesTeq).
 Definition nominalType := NominalType sT nominalMixin.
 
 Definition pack (sT : subType P) m & phant sT := Pack sT m.
@@ -1538,7 +1485,7 @@ by apply: (canRL gK).
 Qed.
 
 Definition BijNominalMixin :=
-  NominalMixin bij_renameD bij_namesNNE bij_namesTeq.
+  NominalMixin (Nominal.Axioms bij_renameD bij_namesNNE bij_namesTeq).
 
 End TransferNominalType.
 
@@ -1804,7 +1751,7 @@ by rewrite fdisjointC !fdisjointUr !fdisjoints1 n'_nin n_nin fdisjoints0.
 Qed.
 
 Definition bound_nominalMixin :=
-  NominalMixin bound_renameD bound_namesNNE bound_namesTeq.
+  NominalMixin (Nominal.Axioms bound_renameD bound_namesNNE bound_namesTeq).
 Canonical bound_nominalType :=
   Eval hnf in NominalType bound_type bound_nominalMixin.
 
