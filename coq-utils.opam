@@ -1,0 +1,28 @@
+opam-version: "2.0"
+name: "coq-utils"
+synopsis: "Additional libraries for coq"
+maintainer: "arthur.aa@gmail.com"
+authors: "Arthur Azevedo de Amorim"
+license: "MIT"
+homepage: "https://github.com/arthuraa/coq-utils"
+bug-reports: "https://github.com/arthuraa/coq-utils/issues"
+depends: [
+  "ocaml"
+  "coq" {(>= "8.7" & < "8.10~") | (= "dev")}
+  "coq-mathcomp-ssreflect" {(>= "1.9" & < "1.10~") | (= "dev")}
+  "coq-mathcomp-fingroup" {(>= "1.9" & < "1.10~") | (= "dev")}
+  "coq-mathcomp-algebra" {(>= "1.9" & < "1.10~") | (= "dev")}
+  "coq-extructures" {(>= "0.2.0" & < "0.3~") | (= "dev")}
+]
+flags: light-uninstall
+build: [
+  ["coq_makefile" "-f" "_CoqProject" "-o" "Makefile"]
+  [make "-j%{jobs}%"]
+]
+install: [make "install"]
+remove: ["rm" "-R" "%{lib}%/coq/user-contrib/CoqUtils"]
+dev-repo: "git+https://github.com/arthuraa/coq-utils.git"
+url {
+  src:
+    "git+https://github.com/arthuraa/coq-utils.git"
+}
