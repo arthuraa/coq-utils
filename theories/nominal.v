@@ -318,58 +318,50 @@ Prenex Implicits renameA rename1 renameK renameKV rename_inj.
 
 Section NominalIndType.
 
-Variables (I : Type) (K_ : I -> nominalType) (s : seq (seq (kind I))).
-Variables T : indType (polyf_functor K_ s).
+Variables (c : nat) (A : fin c -> nominalType) (ks : fin c -> nat).
+Variables T : indType (polyf_functor A ks).
 
 Implicit Types (x y : T) (n : name).
 
-Definition ind_rename s x : T :=
-  rec (fun args =>
-         Roll (Polyf (hmap (fun k =>
-                              if k is Other R then rename s
-                              else @snd _ _)
-                           (pargs args))))
-      x.
+Definition ind_rename s : T -> T :=
+  rec (fun args : polyf A ks (T * T) =>
+         Roll (Polyf (pconstr args)
+                     (rename s (pargs args))
+                     (imap (fun x : T * T => x.2) (prargs args)))).
 
-Definition ind_names x :=
-  rec (fun args => hfold (fun k => if k is Other R then
-                                     fun a A => names a :|: A
-                                   else
-                                     fun (x : T * {fset name}) A => x.2 :|: A)
-                         fset0
-                         (pargs args)) x.
+Definition ind_names :=
+  rec (fun args : polyf A ks (T * {fset name}) =>
+         names (pargs args) :|: \bigcup_(xA <- seq_of_ilist (prargs args)) xA.2).
 
 Lemma ind_renameP : Nominal.axioms ind_rename ind_names.
 Proof.
 split.
-- move=> s1 s2; elim/indP=> [[k args]].
-  rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _).
+- move=> s1 s2; elim/indP=> [[k args rargs]].
+  rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _) renameA !imap_comp.
   congr Roll; congr Polyf.
-  elim: (nth_fin k) args=> {k} [|[R|] ks IH] //=.
-  + by case=> [a args] /=; rewrite IH renameA.
-  + by case=> [[/= x ->] args] /=; rewrite IH.
-- move=> n n'; elim/indP=> [[k args]].
+  elim: (ks k) rargs=> //= n IH [[x IHx] rargs] /=; by rewrite IH IHx.
+- move=> n n'; elim/indP=> [[k args rargs]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
   rewrite /ind_names !recE /= -![rec _]/(ind_names).
-  move=> Hn Hn'; congr Roll; congr Polyf=> /=.
-  elim: {k} (nth_fin k) args Hn Hn'=> [|[R|] ks IH] //=.
-  + case=> [a args]; rewrite /= 2!in_fsetU.
-    case/norP=> [Hna Hn]; case/norP=> [Hn'a Hn'].
-    by rewrite !namesNNE ?IH //.
-  + case=> [[x Px] args]; rewrite /= 2!in_fsetU.
-    case/norP=> [Hnx Hn]; case/norP=> [Hn'x Hn'].
-    by rewrite Px ?IH.
-- move=> n n'; elim/indP=> [[k args]].
+  rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
+  case/norP=> n'_args n'_rargs; congr Roll; congr Polyf=> /=.
+    by rewrite namesNNE.
+  rewrite !imap_comp.
+  elim: (ks k) rargs {n_args n'_args} n_rargs n'_rargs=> //=.
+  move=> m IH [[x IHx] rargs] /=.
+  rewrite big_cons !in_fsetU; case/norP=> /= n_x IHn.
+  by case/norP=> /= n'_x IHn'; rewrite IHx // IH.
+- move=> n n'; elim/indP=> [[k args rargs]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
   rewrite /ind_names !recE /= -![rec _]/(ind_names).
-  move=> Hn /Roll_inj/Polyf_inj /= Hargs.
-  elim: {k} (nth_fin k) args Hargs Hn=> /= [|[R|] ks IH] //.
-  + case=> /= [a args] [Ha Hargs] /fsetUP [in_a|in_args].
-      apply/fsetUP; left; exact: namesTeq in_a Ha.
-    apply/fsetUP; right; exact: IH in_args.
-  + case=> /= [[a IHa] args] /= [Ha Hargs] /fsetUP [in_a|in_args].
-      apply/fsetUP; left; exact: IHa in_a Ha.
-    apply/fsetUP; right; exact: IH in_args.
+  (* This extra move should not be needed *)
+  move=> Hn /Roll_inj H; move: (Polyf_inj H)=> {H} [H1 H2].
+  case/fsetUP: Hn=> Hn.
+    apply/fsetUP; left; exact: namesTeq Hn H1.
+  apply/fsetUP; right.
+  elim: (ks k) rargs Hn H2 {H1 args}; rewrite /= ?big_nil //.
+  move=> m IH [[x IHx] rargs] /=.
+  by rewrite big_cons /=; case/fsetUP=> Hn [Hx Hrargs]; apply/fsetUP; eauto.
 Qed.
 
 End NominalIndType.

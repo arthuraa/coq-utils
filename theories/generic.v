@@ -39,15 +39,15 @@ Record mixin_of T (F : functor) := Mixin {
 }.
 Notation class_of := mixin_of (only parsing).
 
-Record type F := Pack {sort : Type; _ : class_of sort F; _ : Type}.
+Record type F := Pack {sort : Type; _ : class_of sort F}.
 Local Coercion sort : type >-> Sortclass.
 Variables (F : functor) (T : Type) (cT : type F).
-Definition class := let: Pack _ c _ as cT' := cT return class_of cT' F in c.
-Definition clone c of phant_id class c := @Pack F T c T.
-Let xT := let: Pack T _ _ := cT in T.
+Definition class := let: Pack _ c as cT' := cT return class_of cT' F in c.
+Definition clone c of phant_id class c := @Pack F T c.
+Let xT := let: Pack T _ := cT in T.
 Notation xclass := (class : class_of xT).
 
-Definition pack c := @Pack F T c T.
+Definition pack c := @Pack F T c.
 
 End ClassDef.
 
@@ -502,7 +502,7 @@ Record mixin_of T := Mixin {
   _         : forall P, ind_at P Cons;
 }.
 
-Record type := Pack {sort : Type; class : @mixin_of sort; _ : Type}.
+Record type := Pack {sort : Type; class : @mixin_of sort}.
 Variables (T : Type).
 Definition recE (m : mixin_of T) : recursor_eq (Cons m) (rec m) :=
   let: Mixin _ _ _ recE _ _ := m in recE.
@@ -519,7 +519,7 @@ Module Exports.
 Coercion sort : type >-> Sortclass.
 Coercion class : type >-> mixin_of.
 Notation coqIndType := type.
-Notation CoqIndType s T m := (@Pack s T m T).
+Notation CoqIndType s T m := (@Pack s T m).
 Notation CoqIndMixin := Mixin.
 End Exports.
 
@@ -644,7 +644,7 @@ Lemma coqInd_indP P :
   forall x, P x.
 Proof.
 rewrite /coqInd_Roll.
-case: (T) P => S [/= Cons _ _ _ _ indP] _ P.
+case: (T) P => S [/= Cons _ _ _ _ indP] P.
 have {indP} indP:
     (forall i, CoqInd.ind_branch P (nth_hlist Cons i)) ->
     (forall x, P x).
@@ -696,8 +696,8 @@ Notation xclass := (class : class_of xT F).
 
 Definition pack c := @Pack F T c T.
 
-Definition eqType := @Equality.Pack cT (base xclass) xT.
-Definition indType := @Ind.Pack F cT (mixin xclass) xT.
+Definition eqType := @Equality.Pack cT (base xclass).
+Definition indType := @Ind.Pack F cT (mixin xclass).
 
 End ClassDef.
 
