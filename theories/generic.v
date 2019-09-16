@@ -168,6 +168,18 @@ Qed.
 Lemma nat_of_fin_inj n : injective (@nat_of_fin n).
 Proof. by elim: n=> [[]|n IH] /= [i|] [j|] // [/IH ->]. Qed.
 
+Fixpoint fin_of_nat n m : option (fin n) :=
+  match n with
+  | 0 => None
+  | n.+1 => if m is m.+1 then if fin_of_nat n m is Some i then Some (Some i) else None
+            else Some None
+  end.
+
+Lemma nat_of_finK n : pcancel (@nat_of_fin n) (@fin_of_nat n).
+Proof.
+by elim: n=> [[]|n IH /= [i|]] //=; rewrite IH.
+Qed.
+
 Lemma leq_fin_swap n (i j : fin n) :
   leq_fin i j =
   match leq_fin j i with
@@ -322,12 +334,82 @@ Fixpoint nth_hlist (ix : seq I) :
                           end
   end.
 
-Fixpoint hlist_of_seq (f : forall i, T_ i) ix : hlist ix :=
-  if ix is i :: ix then (f i, hlist_of_seq f ix) else tt.
+(*
+Fixpoint hlist_of_fun (f : forall i, T_ i) ix : hlist ix :=
+  if ix is i :: ix then (f i, hlist_of_fun f ix) else tt.
 
-Lemma nth_hlist_of_seq f ix n :
-  nth_hlist (hlist_of_seq f ix) n = f (nth_fin n).
+Lemma nth_hlist_of_fun f ix n :
+  nth_hlist (hlist_of_fun f ix) n = f (nth_fin n).
 Proof. elim: ix n=> /= [|i ix IH] // [n|]; by rewrite ?IH. Qed.
+*)
+
+Fixpoint seq_of_hlist S ix (f : forall i, T_ i -> S) : hlist ix -> seq S :=
+  match ix with
+  | [::] => fun _ => [::]
+  | i :: ix => fun l => f i l.1 :: seq_of_hlist f l.2
+  end.
+
+Fixpoint hlist_of_seq S ix (f : forall i, S -> option (T_ i)) : seq S -> option (hlist ix) :=
+  match ix with
+  | [::] => fun xs => Some tt
+  | i :: ix => fun xs => if xs is x :: xs then
+                           match f i x, hlist_of_seq ix f xs with
+                           | Some y, Some l => Some (y, l)
+                           | _ , _ => None
+                           end
+                         else None
+  end.
+
+Lemma seq_of_hlistK S ix f g :
+  (forall i, pcancel (f i) (g i)) ->
+  pcancel (@seq_of_hlist S ix f) (@hlist_of_seq S ix g).
+Proof.
+move=> fK; elim: ix=> [[]|i ix IH /= [x l]] //=.
+by rewrite fK IH.
+Qed.
+
+Fixpoint seq_of_hlist_in S ix :
+  (forall n : fin (size ix), T_ (nth_fin n) -> S) ->
+  hlist ix -> seq S :=
+  if ix is i :: ix then
+    fun f xs => f None xs.1 :: seq_of_hlist_in (fun n => f (Some n)) xs.2
+  else fun _ _ => [::].
+
+Fixpoint hlist_of_seq_in S ix (f : forall n : fin (size ix), S -> option (T_ (nth_fin n))) (xs : seq S) {struct xs} : option (hlist ix) :=
+  match xs with
+  | [::] =>
+    match ix return option (hlist ix) with
+    | [::] => Some tt
+    | _ => None
+    end
+  | x :: xs =>
+    match ix return (forall n : fin (size ix), S -> option (T_ (nth_fin n))) -> option (hlist ix) with
+    | [::] => fun _ => None
+    | i :: ix => fun f =>
+                   match f None x, hlist_of_seq_in (fun n => f (Some n)) xs with
+                   | Some y, Some ys => Some (y, ys)
+                   | _, _ => None
+                   end
+    end f
+  end.
+
+Lemma seq_of_hlist_inK S ix
+  (f : forall n : fin (size ix), T_ (nth_fin n) -> S)
+  (g : forall n : fin (size ix), S -> option (T_ (nth_fin n))) :
+  (forall n, pcancel (f n) (g n)) ->
+  pcancel (seq_of_hlist_in f) (hlist_of_seq_in g).
+Proof.
+elim: ix f g=> [??? []|i ix IH] //= f g fK [x xs] /=.
+by rewrite fK IH // => n ?; rewrite fK.
+Qed.
+
+Lemma hlist_of_seq_in_map
+  S R ix (f : forall n : fin (size ix), R -> option (T_ (nth_fin n))) (g : S -> R) (xs : seq S) :
+  hlist_of_seq_in f [seq g x | x <- xs] = hlist_of_seq_in (fun n x => f n (g x)) xs.
+Proof.
+elim: ix f xs=> [|i ix IH] /= f [|x xs] //=.
+by case: (f None (g x))=> [y|] //=; rewrite IH.
+Qed.
 
 Fixpoint hlist_of_fun ix : forall (f : forall n : fin (size ix), T_ (nth_fin n)), hlist ix :=
   match ix with
@@ -363,6 +445,31 @@ End Hlist.
 
 Coercion happ : hfun >-> Funclass.
 
+(*
+Fixpoint seq_of_hlist I T ix : hlist (fun i : I => T) ix -> seq T :=
+  match ix with
+  | [::] => fun _ => [::]
+  | i :: ix => fun l => l.1 :: seq_of_hlist l.2
+  end.
+
+Fixpoint hlist_of_seq I T ix : seq T -> option (hlist (fun i : I => T) ix) :=
+  match ix with
+  | [::] => fun xs => if nilp xs then Some tt else None
+  | i :: ix => fun xs =>
+    match xs with
+    | [::] => None
+    | x :: xs =>
+      if hlist_of_seq ix xs is Some xs then Some (x, xs)
+      else None
+    end
+  end.
+
+Lemma seq_of_hlistK I T ix : pcancel (@seq_of_hlist I T ix) (@hlist_of_seq I T ix).
+Proof.
+by elim: ix=> /= [[]|i ix IH [x xs]] //=; rewrite IH.
+Qed.
+*)
+
 Fixpoint hmap I (T_ S_ : I -> Type) (f : forall i, T_ i -> S_ i) ix :
   hlist T_ ix -> hlist S_ ix :=
   match ix with
@@ -388,6 +495,35 @@ Lemma hmap_comp I (T_ S_ R_ : I -> Type)
   hmap g (hmap f l) = hmap (fun i => g i \o f i) l.
 Proof.
 by elim: ix l=> [[]|i ix IH] //= [x l] /=; rewrite IH.
+Qed.
+
+Definition hmap_in I (T_ S_ : I -> Type) ix :
+  (forall n : fin (size ix), T_ (nth_fin n) -> S_ (nth_fin n)) ->
+  hlist T_ ix -> hlist S_ ix :=
+  fun f l => hlist_of_fun (fun n => f n (nth_hlist l n)).
+
+Fixpoint hpmap_in I (T_ S_ : I -> Type) ix :
+  (forall n : fin (size ix), T_ (nth_fin n) -> option (S_ (nth_fin n))) ->
+  hlist T_ ix -> option (hlist S_ ix) :=
+  match ix with
+  | [::] =>
+    fun f l => Some tt
+  | i :: ix =>
+    fun f l => if hpmap_in (fun n => f (Some n)) l.2 is Some l' then
+                 if f None l.1 is Some x then
+                   Some (x, l')
+                 else None
+               else None
+  end.
+
+Lemma hmap_pinK I (T_ S_ : I -> Type) ix
+  (f : forall n : fin (size ix), T_ (nth_fin n) -> S_ (nth_fin n))
+  (g : forall n : fin (size ix), S_ (nth_fin n) -> option (T_ (nth_fin n))) :
+  (forall n, pcancel (f n) (g n)) -> pcancel (hmap_in f) (hpmap_in g).
+Proof.
+rewrite /hmap_in; elim: ix f g=> [|i ix IH] //= f g fK => [[]|[x xs]] //=.
+rewrite fK (IH (fun n => f (Some n)) (fun n => g (Some n))) //.
+move=> n; exact: (fK (Some n)).
 Qed.
 
 Fixpoint hzip I (T_ S_ : I -> Type) ix :
@@ -848,6 +984,92 @@ End Exports.
 End IndEqType.
 
 Export IndEqType.Exports.
+
+Section TreeOfCoqInd.
+
+Variables (s : signature).
+Let F := CoqIndFunctor.coqInd_functor s.
+Variables (T : indType F).
+
+Import GenTree.
+
+Inductive coqIndArg :=
+| CoqIndArg (i : fin (size s)) (j : fin (size (nth_fin i))) of
+  CoqInd.type_of_arg void (nth_fin j).
+
+Definition proj_coqIndArg
+  (i : fin (size s)) (j : fin (size (nth_fin i))) (x : coqIndArg) :
+  option (CoqInd.type_of_arg void (nth_fin j)) :=
+  let: CoqIndArg i' j' x' := x in
+  if leq_fin i' i is inl e then
+    match e^-1 in _ = i'
+    return forall j' : fin (size (nth_fin i')), CoqInd.type_of_arg void (nth_fin j') -> option _
+    with
+    | erefl => fun j' =>
+      if leq_fin j' j is inl e' then
+        match e'^-1 in _ = j' return CoqInd.type_of_arg void (nth_fin j') -> option _ with
+        | erefl => fun x => Some x
+        end
+      else fun _ => None
+    end j' x'
+  else None.
+
+Lemma CoqIndArgK i j : pcancel (@CoqIndArg i j) (@proj_coqIndArg i j).
+Proof.
+move=> x; by rewrite /proj_coqIndArg leq_finii /= leq_finii /=.
+Qed.
+
+Let wrap (i : fin (size s)) (j : fin (size (nth_fin i))) :
+  CoqInd.type_of_arg (tree coqIndArg) (nth_fin j) -> tree coqIndArg :=
+  match nth_fin j as k
+  return (CoqInd.type_of_arg void k -> coqIndArg) ->
+         CoqInd.type_of_arg (tree coqIndArg) k -> tree coqIndArg
+  with
+  | Other R => fun c x => Leaf (c x)
+  | Rec     => fun c x => x
+  end (@CoqIndArg i j).
+
+Definition tree_of_coqInd (x : T) : tree coqIndArg :=
+  rec (fun x =>
+         let i := CoqIndFunctor.constr x in
+         Node (nat_of_fin i)
+           (seq_of_hlist_in (@wrap i)
+              (hmap (CoqInd.type_of_arg_map snd) (CoqIndFunctor.args x)))) x.
+
+Fixpoint coqInd_of_tree (x : tree coqIndArg) : option T :=
+  match x with
+  | Leaf _ => None
+  | Node c args =>
+    if fin_of_nat (size s) c is Some i then
+      let args := [seq (t, coqInd_of_tree t) | t <- args] in
+      if hlist_of_seq_in (fun j ts =>
+                            match nth_fin j as k
+                                  return (coqIndArg -> option (CoqInd.type_of_arg void k)) ->
+                                         option (CoqInd.type_of_arg T k) with
+                            | Other R => fun f => if ts.1 is Leaf x then f x else None
+                            | Rec => fun _ => ts.2
+                            end (@proj_coqIndArg i j)) args is Some args then
+        Some (Roll (CoqIndFunctor.CoqInd args))
+      else None
+    else None
+  end.
+
+Lemma tree_of_coqIndK : pcancel tree_of_coqInd coqInd_of_tree.
+Proof.
+elim/indP=> [[i args]].
+rewrite /tree_of_coqInd recE /= -[rec _]/(tree_of_coqInd).
+rewrite nat_of_finK !hmap_comp /=.
+set args' := hlist_of_seq_in _ _.
+suffices -> : args' = Some (hmap (CoqInd.type_of_arg_map tag) args) by [].
+rewrite {}/args' hlist_of_seq_in_map /= /wrap.
+move: (@CoqIndArg i) (@proj_coqIndArg i) (@CoqIndArgK i).
+elim: {i} (nth_fin i) args=> [|[R|] a IH] //= args C p CK.
+  by rewrite CK IH //= => j x; rewrite CK.
+case: args=> [[x xP] args] /=; rewrite xP IH //.
+by move=> j ?; rewrite CK.
+Qed.
+
+End TreeOfCoqInd.
 
 Module IndOrdType.
 
