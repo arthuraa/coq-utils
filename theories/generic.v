@@ -1487,6 +1487,8 @@ Canonical seq_coqIndType :=
 
 End Instances.
 
+Module Example.
+
 Inductive tree (T : Type) :=
 | Leaf of nat
 | Node of T & tree T & tree T.
@@ -1528,3 +1530,5 @@ Canonical tree_countType (T : countType) :=
 
 Canonical tree_ordType (T : ordType) :=
   Eval hnf in [indOrdType for tree T].
+
+End Example.

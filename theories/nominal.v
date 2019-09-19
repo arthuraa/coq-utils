@@ -318,50 +318,71 @@ Prenex Implicits renameA rename1 renameK renameKV rename_inj.
 
 Section NominalIndType.
 
-Variables (c : nat) (A : fin c -> nominalType) (ks : fin c -> nat).
-Variables T : indType (polyf_functor A ks).
+Variables (sig : sig_inst Nominal.sort).
+Let F := CoqIndFunctor.coqInd_functor sig.
+Variables T : indType F.
 
 Implicit Types (x y : T) (n : name).
 
 Definition ind_rename s : T -> T :=
-  rec (fun args : polyf A ks (T * T) =>
-         Roll (Polyf (pconstr args)
-                     (rename s (pargs args))
-                     (imap (fun x : T * T => x.2) (prargs args)))).
+  rec (fun args : F (T * T)%type =>
+         Roll (CoqIndFunctor.CoqInd
+                 (@arity_rec
+                    _ Nominal.sort (fun a : arity => hlist (type_of_kind (T * T)) a -> hlist (type_of_kind T) a)
+                    (fun _ => tt)
+                    (fun (R : nominalType) a loop args => (rename s args.1, loop args.2))
+                    (fun   a loop args => (args.1.2, loop args.2))
+                    (nth_fin (CoqIndFunctor.constr args))
+                    (nth_hlist (sig_inst_class sig) (CoqIndFunctor.constr args))
+                    (CoqIndFunctor.args args)
+      ))).
 
 Definition ind_names :=
-  rec (fun args : polyf A ks (T * {fset name}) =>
-         names (pargs args) :|: \bigcup_(xA <- seq_of_ilist (prargs args)) xA.2).
+  rec (fun args : F (T * {fset name})%type =>
+         @arity_rec
+           _ Nominal.sort (fun a => hlist (type_of_kind (T * {fset name})) a -> {fset name})
+           (fun _ => fset0)
+           (fun R a loop args => names args.1 :|: loop args.2)
+           (fun   a loop args => args.1.2 :|: loop args.2)
+           _
+           (nth_hlist (sig_inst_class sig) (CoqIndFunctor.constr args))
+           (CoqIndFunctor.args args)).
 
 Lemma ind_renameP : Nominal.axioms ind_rename ind_names.
 Proof.
 split.
-- move=> s1 s2; elim/indP=> [[k args rargs]].
-  rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _) renameA !imap_comp.
-  congr Roll; congr Polyf.
-  elim: (ks k) rargs=> //= n IH [[x IHx] rargs] /=; by rewrite IH IHx.
-- move=> n n'; elim/indP=> [[k args rargs]].
+- move=> s1 s2; elim/indP=> [[i args]].
+  rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _).
+  congr (Roll (CoqIndFunctor.CoqInd _)).
+  elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args => //=.
+  + by move=> R a ac IH [x args] /=; rewrite {}IH renameA.
+  + by move=> a ac IH [[x xP] args] /=; rewrite {}IH xP.
+- move=> n n'; elim/indP=> [[i args]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
-  rewrite /ind_names !recE /= -![rec _]/(ind_names).
-  rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
-  case/norP=> n'_args n'_rargs; congr Roll; congr Polyf=> /=.
-    by rewrite namesNNE.
-  rewrite !imap_comp.
-  elim: (ks k) rargs {n_args n'_args} n_rargs n'_rargs=> //=.
-  move=> m IH [[x IHx] rargs] /=.
-  rewrite big_cons !in_fsetU; case/norP=> /= n_x IHn.
-  by case/norP=> /= n'_x IHn'; rewrite IHx // IH.
-- move=> n n'; elim/indP=> [[k args rargs]].
+  rewrite /ind_names !recE /= -![rec _]/(ind_names) => Hn Hn' /=.
+  do 2![apply: congr1]=> /=.
+  elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args Hn Hn'=> //=.
+  + move=> R a ac IH [x args] /=.
+    rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
+    case/norP=> n'_args n'_rargs.
+    by rewrite namesNNE // IH.
+  + move=> a ac IH [[x xP] args] /=.
+    rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
+    case/norP=> n'_args n'_rargs.
+    by rewrite xP // IH.
+- move=> n n'; elim/indP=> [[i args]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
-  rewrite /ind_names !recE /= -![rec _]/(ind_names).
-  (* This extra move should not be needed *)
-  move=> Hn /Roll_inj H; move: (Polyf_inj H)=> {H} [H1 H2].
-  case/fsetUP: Hn=> Hn.
-    apply/fsetUP; left; exact: namesTeq Hn H1.
-  apply/fsetUP; right.
-  elim: (ks k) rargs Hn H2 {H1 args}; rewrite /= ?big_nil //.
-  move=> m IH [[x IHx] rargs] /=.
-  by rewrite big_cons /=; case/fsetUP=> Hn [Hx Hrargs]; apply/fsetUP; eauto.
+  rewrite /ind_names !recE /= -![rec _]/(ind_names) /=.
+  move=> Hn /Roll_inj/CoqIndFunctor.inj /= Hargs.
+  elim/arity_ind: {i} _ / (nth_hlist _ i) args Hn Hargs=> //=.
+  + move=> R a ac IH [x args] /= Hn [Hx Hargs].
+    case/fsetUP: Hn=> Hn.
+      apply/fsetUP; left; exact: namesTeq Hn Hx.
+    by apply/fsetUP; right; apply: IH.
+  + move=> a ac IH [[x xP] args] /= Hn [Hx Hargs].
+    case/fsetUP: Hn=> Hn.
+      apply/fsetUP; left; exact: xP Hn Hx.
+    by apply/fsetUP; right; apply: IH.
 Qed.
 
 End NominalIndType.
