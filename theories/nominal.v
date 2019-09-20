@@ -19,6 +19,8 @@ Definition name_eqMixin := [eqMixin of name by <:].
 Canonical name_eqType := Eval hnf in EqType name name_eqMixin.
 Definition name_choiceMixin := [choiceMixin of name by <:].
 Canonical name_choiceType := Eval hnf in ChoiceType name name_choiceMixin.
+Definition name_countMixin := [countMixin of name by <:].
+Canonical name_countType := Eval hnf in CountType name name_countMixin.
 Definition name_ordMixin := [ordMixin of name by <:].
 Canonical name_ordType := Eval hnf in OrdType name name_ordMixin.
 
