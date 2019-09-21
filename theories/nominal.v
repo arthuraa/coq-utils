@@ -318,7 +318,45 @@ End Basics.
 
 Prenex Implicits renameA rename1 renameK renameKV rename_inj.
 
-Section NominalIndType.
+Section NameNominal.
+
+Local Open Scope fset_scope.
+Local Open Scope fperm_scope.
+
+Implicit Types (s : {fperm name}) (n : name).
+
+Definition name_rename s n := s n.
+
+Definition name_names n := fset1 n.
+
+Lemma name_renameP : Nominal.axioms name_rename name_names.
+Proof.
+rewrite /name_rename /name_names; split.
+- by move=> ???; rewrite fpermM.
+- by move=> n n' n''; rewrite !in_fset1 !(eq_sym _ n''); apply: fperm2D.
+- by move=> n n' n'' /fset1P <-{n''}; rewrite in_fset1 fperm2L=> ->.
+Qed.
+
+Definition name_nominalMixin := NominalMixin name_renameP.
+Canonical name_nominalType := Eval hnf in NominalType name name_nominalMixin.
+
+Lemma renamenE s n : rename s n = s n. Proof. by []. Qed.
+
+Lemma namesnE n : names n = fset1 n.
+Proof. by []. Qed.
+
+Lemma namesnP n' n : reflect (n' = n) (n' \in names n).
+Proof. rewrite in_fset1; exact/eqP. Qed.
+
+End NameNominal.
+
+End NominalTheory.
+
+Module IndNominalType.
+
+Section Def.
+
+Open Scope fset_scope.
 
 Variables (sig : sig_inst Nominal.sort).
 Let F := CoqIndFunctor.coqInd_functor sig.
@@ -326,7 +364,7 @@ Variables T : indType F.
 
 Implicit Types (x y : T) (n : name).
 
-Definition ind_rename s : T -> T :=
+Let ind_rename s : T -> T :=
   rec (fun args : F (T * T)%type =>
          Roll (CoqIndFunctor.CoqInd
                  (@arity_rec
@@ -339,7 +377,7 @@ Definition ind_rename s : T -> T :=
                     (CoqIndFunctor.args args)
       ))).
 
-Definition ind_names :=
+Let ind_names :=
   rec (fun args : F (T * {fset name})%type =>
          @arity_rec
            _ Nominal.sort (fun a => hlist (type_of_kind (T * {fset name})) a -> {fset name})
@@ -387,41 +425,39 @@ split.
     by apply/fsetUP; right; apply: IH.
 Qed.
 
-End NominalIndType.
+End Def.
 
-Section NameNominal.
+Definition nominalMixin :=
+  fun (T : Type) =>
+  fun s (sT_ind : coqIndType s) & phant_id (CoqInd.sort sT_ind) T =>
+  fun ss & phant_id (sig_inst_sort ss) s =>
+  fun cT_ind & phant_id (CoqInd.class sT_ind) cT_ind =>
+  fun sT_ord & phant_id (Ord.sort sT_ord) T =>
+  fun (cT : Ord.class_of T) & phant_id (Ord.class sT_ord) cT =>
+  ltac:(
+    let cl t :=
+      eval compute -[name_ordType fsetU fset0 names rename fset_of
+                     Nominal.sort FPerm.fperm_of Ord.sort] in t in
+    match type of (@ind_renameP ss (@CoqInd.Pack ss T cT_ind)) with
+    | Nominal.axioms ?r ?n =>
+      let r' := cl r in
+      let n' := cl n in
+      exact: (@NominalMixin T r' n' (@ind_renameP ss (CoqInd.Pack cT_ind)))
+    end).
 
-Local Open Scope fset_scope.
-Local Open Scope fperm_scope.
+Module Import Exports.
+Notation "[ 'indNominalMixin' 'for' T ]" :=
+  (let sT := @nominalMixin T _ _ id _ id _ id _ id _ id in
+   ltac:(
+     hnf in sT;
+     let x := eval unfold sT in sT in exact x))
+  (at level 0, format "[ 'indNominalMixin'  'for'  T ]") : form_scope.
 
-Implicit Types (s : {fperm name}) (n : name).
+End Exports.
 
-Definition name_rename s n := s n.
+End IndNominalType.
 
-Definition name_names n := fset1 n.
-
-Lemma name_renameP : Nominal.axioms name_rename name_names.
-Proof.
-rewrite /name_rename /name_names; split.
-- by move=> ???; rewrite fpermM.
-- by move=> n n' n''; rewrite !in_fset1 !(eq_sym _ n''); apply: fperm2D.
-- by move=> n n' n'' /fset1P <-{n''}; rewrite in_fset1 fperm2L=> ->.
-Qed.
-
-Definition name_nominalMixin := NominalMixin name_renameP.
-Canonical name_nominalType := Eval hnf in NominalType name name_nominalMixin.
-
-Lemma renamenE s n : rename s n = s n. Proof. by []. Qed.
-
-Lemma namesnE n : names n = fset1 n.
-Proof. by []. Qed.
-
-Lemma namesnP n' n : reflect (n' = n) (n' \in names n).
-Proof. rewrite in_fset1; exact/eqP. Qed.
-
-End NameNominal.
-
-End NominalTheory.
+Export IndNominalType.Exports.
 
 Ltac finsupp := typeclasses eauto with typeclass_instances.
 

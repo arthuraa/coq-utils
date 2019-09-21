@@ -949,7 +949,7 @@ Variable (s : sig_inst).
 Let F := CoqIndFunctor.coqInd_functor s.
 Variable (T : indType F).
 
-Definition eq_op_branch a (ac : hlist kind_class a) :
+Let eq_op_branch a (ac : hlist kind_class a) :
   hlist (type_of_kind (T * (T -> bool))) a ->
   hlist (type_of_kind T)                 a ->
   bool :=
@@ -958,23 +958,24 @@ Definition eq_op_branch a (ac : hlist kind_class a) :
     (fun R a rec x y => (x.1 == y.1) && rec x.2 y.2)
     (fun   a rec x y => x.1.2 y.1 && rec x.2 y.2) a ac.
 
-Definition eq_op : T -> T -> bool :=
-  rec (fun args1 x2 =>
-         let args2 := unroll x2 in
-         match leq_fin (CoqIndFunctor.constr args2) (CoqIndFunctor.constr args1) with
-         | inl e =>
-           eq_op_branch
-             (nth_hlist (sig_inst_class s) (CoqIndFunctor.constr args1))
-             (CoqIndFunctor.args args1)
-             (cast (hlist (type_of_kind T) \o @nth_fin _ _) e (CoqIndFunctor.args args2))
-         | inr _ => false
-         end).
+Let eq_op : T -> T -> bool :=
+  rec (fun args1 =>
+         case
+           (fun args2 =>
+              match leq_fin (CoqIndFunctor.constr args2) (CoqIndFunctor.constr args1) with
+              | inl e =>
+                eq_op_branch
+                  (nth_hlist (sig_inst_class s) (CoqIndFunctor.constr args1))
+                  (CoqIndFunctor.args args1)
+                  (cast (hlist (type_of_kind T) \o @nth_fin _ _) e (CoqIndFunctor.args args2))
+              | inr _ => false
+              end)).
 
 Lemma eq_opP : Equality.axiom eq_op.
 Proof.
 elim/indP=> [[i_x xargs]] y.
 rewrite /eq_op recE /= -[rec _]/(eq_op) /=.
-rewrite -{1}[y]unrollK; move: {y} (unroll y)=> [i_y yargs] /=.
+rewrite -[y]unrollK caseE; move: {y} (unroll y)=> [i_y yargs] /=.
 case le: (leq_fin i_y i_x)=> [e|b]; last first.
   constructor=> /Roll_inj /= [] e _.
   by move: le; rewrite e leq_finii.
@@ -1003,15 +1004,26 @@ Record type (F : functor) := Pack {
 Definition eqType F (T : type F) := Equality.Pack (eq_class T).
 Definition indType F (T : type F) := Ind.Pack (ind_class T).
 
-Definition pack :=
-  fun (T : Type) s (sT : coqIndType s) & phant_id (CoqInd.sort sT) T =>
+Definition eqMixin :=
+  fun (T : Type) =>
+  fun s (sT : coqIndType s) & phant_id (CoqInd.sort sT) T =>
   fun (ss : sig_inst) & phant_id s (sig_inst_sort ss) =>
   fun (cT : CoqInd.mixin_of ss T) & phant_id (CoqInd.class sT) cT =>
-    EqType T (EqMixin (@eq_opP ss (CoqInd.Pack cT))).
+    ltac:(
+      let ax := constr:(@eq_opP ss (CoqInd.Pack cT)) in
+      match type of ax with
+      | Equality.axiom ?e =>
+        let e' := eval compute -[eq_op Equality.sort andb] in e in
+        exact: @EqMixin T e' ax
+      end).
 
 Module Import Exports.
-Notation "[ 'indEqType' 'for' T ]" := (@pack T _ _ id _ id _ id)
-  (at level 0, format "[ 'indEqType'  'for'  T ]") : form_scope.
+Notation "[ 'indEqMixin' 'for' T ]" :=
+  (let m := @eqMixin T _ _ id _ id _ id in
+   ltac:(
+     let x := eval hnf in m in
+     exact x))
+  (at level 0, format "[ 'indEqMixin'  'for'  T ]") : form_scope.
 Notation indEqType := type.
 Coercion sort : type >-> Sortclass.
 Coercion eqType : type >-> Equality.type.
@@ -1120,13 +1132,13 @@ Definition pack_tree_of_coq_indK :=
   fun s (sT_ind : coqIndType s) & phant_id (CoqInd.sort sT_ind) T =>
   @tree_of_coq_indK _ sT_ind.
 
-Notation "[ 'indChoiceType' 'for' T ]" :=
-  (ChoiceType T (PcanChoiceMixin (@pack_tree_of_coq_indK T _ _ id)))
-  (at level 0, format "[ 'indChoiceType'  'for'  T ]") : form_scope.
+Notation "[ 'indChoiceMixin' 'for' T ]" :=
+  (PcanChoiceMixin (@pack_tree_of_coq_indK T _ _ id))
+  (at level 0, format "[ 'indChoiceMixin'  'for'  T ]") : form_scope.
 
-Notation "[ 'indCountType' 'for' T ]" :=
-  (CountType T (PcanCountMixin (@pack_tree_of_coq_indK T _ _ id)))
-  (at level 0, format "[ 'indCountType'  'for'  T ]") : form_scope.
+Notation "[ 'indCountMixin' 'for' T ]" :=
+  (PcanCountMixin (@pack_tree_of_coq_indK T _ _ id))
+  (at level 0, format "[ 'indCountMixin'  'for'  T ]") : form_scope.
 
 Module IndOrdType.
 
@@ -1154,23 +1166,24 @@ Definition leq_branch a (ac : hlist kind_class a) :
        if x.1.1 == y.1 then rec x.2 y.2 else x.1.2 y.1) a ac.
 
 Definition leq : T -> T -> bool :=
-  rec (fun args1 x2 =>
-         let args2 := unroll x2 in
-         match leq_fin (CoqIndFunctor.constr args2) (CoqIndFunctor.constr args1) with
-         | inl e =>
-           leq_branch
-             (nth_hlist (sig_inst_class s) (CoqIndFunctor.constr args1))
-             (CoqIndFunctor.args args1)
-             (cast (hlist (type_of_kind T) \o @nth_fin _ _) e (CoqIndFunctor.args args2))
-         | inr b => ~~ b
-         end).
+  rec (fun args1 =>
+         case
+           (fun args2 =>
+              match leq_fin (CoqIndFunctor.constr args2) (CoqIndFunctor.constr args1) with
+              | inl e =>
+                leq_branch
+                  (nth_hlist (sig_inst_class s) (CoqIndFunctor.constr args1))
+                  (CoqIndFunctor.args args1)
+                  (cast (hlist (type_of_kind T) \o @nth_fin _ _) e (CoqIndFunctor.args args2))
+              | inr b => ~~ b
+              end)).
 
 Lemma leqP : Ord.axioms leq.
 Proof.
 have anti: antisymmetric leq.
   elim/indP=> [[i_x xargs]] y.
   rewrite -(unrollK y); case: {y} (unroll y)=> [i_y yargs].
-  rewrite /leq !recE -[rec _]/(leq) !RollK /=.
+  rewrite /leq !recE -[rec _]/(leq) /= !caseE /=.
   case ie: (leq_fin i_y i_x) (leq_nat_of_fin i_y i_x)=> [e|b].
     case: i_x / e {ie} xargs=> xargs _ /=; rewrite leq_finii /= => h.
     congr (Roll (CoqIndFunctor.CoqInd _))=> /=.
@@ -1190,14 +1203,14 @@ have anti: antisymmetric leq.
     by case: ltngtP ne.
 split=> //.
 - elim/indP=> [[i args]].
-  rewrite /leq recE /= -[rec _]/(leq) RollK leq_finii /=.
+  rewrite /leq recE /= -[rec _]/(leq) caseE leq_finii /=.
   elim/arity_ind: {i} _ / (nth_hlist _ _) args=> [[]|R a ac IH|a ac IH] //=.
     by case=> [x args]; rewrite /= eqxx.
   by case=> [[x xP] args] /=; rewrite eqxx.
 - move=> y x z; elim/indP: x y z=> [[i_x xargs]] y z.
   rewrite -(unrollK y) -(unrollK z).
   move: (unroll y) (unroll z)=> {y z} [i_y yargs] [i_z zargs].
-  rewrite /leq !recE /= -[rec _]/(leq) !RollK /=.
+  rewrite /leq !recE /= -[rec _]/(leq) !caseE /=.
   case: (leq_fin i_y i_x) (leq_nat_of_fin i_y i_x)=> [e _|b] //.
     case: i_x / e xargs=> /= xargs.
     case: (leq_fin i_z i_y) (leq_nat_of_fin i_z i_y)=> [e _|b] //.
@@ -1227,7 +1240,7 @@ split=> //.
   move: i_xy; rewrite -!ltnNge; exact: ltn_trans.
 - elim/indP=> [[i_x xargs]] y.
   rewrite -(unrollK y); case: {y} (unroll y)=> [i_y yargs].
-  rewrite /leq !recE /= -[rec _]/(leq) !RollK /= (leq_fin_swap i_x i_y).
+  rewrite /leq !recE /= -[rec _]/(leq) !caseE /= (leq_fin_swap i_x i_y).
   case: (leq_fin i_y i_x)=> [e|[] //].
   case: i_x / e xargs=> /= xargs.
   elim/arity_ind: {i_y} _ / (nth_hlist _ _) xargs yargs=> [[] []|R|] //= a ac IH.
@@ -1240,17 +1253,27 @@ Qed.
 
 End OrdType.
 
-Definition pack :=
+Definition ordMixin :=
   fun (T : Type) =>
   fun (b : Choice.class_of T) bT & phant_id (Choice.class bT) b =>
   fun s (sT : coqIndType s) & phant_id (CoqInd.sort sT) T =>
   fun (ss : sig_inst) & phant_id s (sig_inst_sort ss) =>
   fun (cT : CoqInd.mixin_of ss T) & phant_id (CoqInd.class sT) cT =>
-    Ord.Pack (Ord.Class b (Ord.Mixin (leqP (IndEqType.Pack b (Ind.class (CoqInd.Pack cT)))))).
+    ltac:(
+      let ax := constr:(@leqP _ (IndEqType.Pack b (Ind.class (CoqInd.Pack cT)))) in
+      match type of ax with
+      | Ord.axioms ?e =>
+        let e' := (eval compute -[Ord.leq eq_op Equality.sort Choice.sort Ord.sort Ord.eqType andb] in e) in
+        exact: @OrdMixin T e' ax
+      end).
 
 Module Import Exports.
-Notation "[ 'indOrdType' 'for' T ]" := (@pack T _ _ id _ _ id _ id _ id)
-  (at level 0, format "[ 'indOrdType'  'for'  T ]") : form_scope.
+Notation "[ 'indOrdMixin' 'for' T ]" :=
+  (let m := @ordMixin T _ _ id _ _ id _ id _ id in
+   ltac:(
+     let x := eval hnf in m in
+     exact x))
+  (at level 0, format "[ 'indOrdMixin'  'for'  T ]") : form_scope.
 End Exports.
 
 End IndOrdType.
@@ -1515,20 +1538,28 @@ Proof. by []. Qed.
 Lemma tree_indP T P : CoqInd.ind_at P (tree_constructors T).
 Proof. exact: tree_rect. Qed.
 
-Definition tree_coqIndMixin T := CoqIndMixin (@tree_recE T) (@tree_caseE T) (@tree_indP T).
+Definition tree_coqIndMixin T :=
+  Eval cbv delta [tree_constructors tree_signature tree_case] in
+  CoqIndMixin (@tree_recE T) (@tree_caseE T) (@tree_indP T).
 Canonical tree_coqIndType T :=
   Eval hnf in CoqIndType _ (tree T) (tree_coqIndMixin T).
 
+Definition tree_eqMixin (T : eqType) :=
+  Eval simpl in [indEqMixin for tree T].
 Canonical tree_eqType (T : eqType) :=
-  Eval hnf in [indEqType for tree T].
-
+  Eval hnf in EqType (tree T) (tree_eqMixin T).
+Definition tree_choiceMixin (T : choiceType) :=
+  [indChoiceMixin for tree T].
 Canonical tree_choiceType (T : choiceType) :=
-  Eval hnf in [indChoiceType for tree T].
-
+  Eval hnf in ChoiceType (tree T) (tree_choiceMixin T).
+Definition tree_countMixin (T : countType) :=
+  [indCountMixin for tree T].
 Canonical tree_countType (T : countType) :=
-  Eval hnf in [indCountType for tree T].
-
+  Eval hnf in CountType (tree T) (tree_countMixin T).
+Definition tree_ordMixin (T : ordType) :=
+  Eval simpl in [indOrdMixin for tree T].
+Set Printing Implicit.
 Canonical tree_ordType (T : ordType) :=
-  Eval hnf in [indOrdType for tree T].
+  Eval hnf in OrdType (tree T) (tree_ordMixin T).
 
 End Example.
