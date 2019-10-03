@@ -1,4 +1,5 @@
-From mathcomp Require Import ssreflect ssrfun ssrbool ssrnat eqtype seq choice.
+From mathcomp Require Import
+  ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype.
 
 From extructures Require Import ord.
 
@@ -1140,6 +1141,109 @@ Notation "[ 'indCountMixin' 'for' T ]" :=
   (PcanCountMixin (@pack_tree_of_coq_indK T _ _ id))
   (at level 0, format "[ 'indCountMixin'  'for'  T ]") : form_scope.
 
+Module IndFinType.
+
+Section FinType.
+
+Fixpoint allP T (P : pred T) (xs : seq T) : all P xs -> forall i : fin (size xs), P (nth_fin i) :=
+  match xs with
+  | [::] => fun H i => match i with end
+  | x :: xs => match P x as b return (P x = b -> b && all P xs ->
+                                      forall i : fin (size (x :: xs)), P (nth_fin i)) with
+               | true => fun e H i => match i with
+                                      | None => e
+                                      | Some j => allP H j
+                                      end
+               | false => ltac:(done)
+               end erefl
+  end.
+
+Variable (sig : sig_inst Finite.sort).
+Let F := CoqIndFunctor.coqInd_functor sig.
+Variable (T : indEqType F).
+
+Hypothesis not_rec : all (all is_other) sig.
+
+Definition enum_branch :=
+  @arity_rec
+    _ _ (fun a => all is_other a -> seq (hlist (type_of_kind T) a))
+    (fun _ => [:: tt])
+    (fun (R : finType) a rec P => allpairs pair (Finite.enum R) (rec P))
+    (fun               a rec P => ltac:(done)).
+
+Definition enum_ind :=
+  flatten [seq [seq Roll (CoqIndFunctor.CoqInd args)
+               | args <- enum_branch (nth_hlist (sig_inst_class sig) i) (allP not_rec i)]
+          | i <- enum_fin (size sig)].
+
+Lemma enum_indP : Finite.axiom enum_ind.
+Proof.
+move=> x; rewrite -[x]unrollK; case: {x} (unroll x)=> i args.
+rewrite /enum_ind count_flatten -!map_comp /comp /=.
+have <- : sumn [seq i == j : nat | j <- enum_fin (size sig)] = 1.
+  elim: (size sig) i {args}=> [|n IH] //= [i|] /=.
+    by rewrite -map_comp /comp /= -(IH i) add0n.
+  rewrite -map_comp /comp /=; congr addn; apply/eqP/natnseq0P.
+  by elim: (enum_fin n)=> {IH} // m ms /= <-.
+congr sumn; apply/eq_map=> j /=; rewrite count_map.
+have [<- {j}|ne] /= := altP (i =P j).
+  set P := preim _ _.
+  have PP : forall args', reflect (args = args') (P args').
+    move=> args'; rewrite /P /=; apply/(iffP idP); last by move=> ->.
+    by move=> /eqP/Roll_inj/CoqIndFunctor.inj ->.
+  move: P PP.
+  elim/arity_ind: {i} _ / (nth_hlist _ i) args (allP _ _)=> //=.
+    by move=> [] _ P /(_ tt); case.
+  move=> R ar ac IH [x args] arP P PP.
+  elim: (Finite.enum R) (enumP x)=> //= y xs IHxs.
+  have [-> {y} [e]|ne] := altP (y =P x).
+    rewrite count_cat count_map (IH args); last first.
+      move=> args'; apply/(iffP (PP (x, args'))); congruence.
+    congr S.
+    elim: xs e {IHxs} => //= y xs; case: (altP eqP) => //= ne H /H.
+    rewrite count_cat => ->; rewrite addn0.
+    elim: (enum_branch _ _)=> //= args' e ->; rewrite addn0.
+    apply/eqP; rewrite eqb0; apply/negP=> /PP [] /esym/eqP.
+    by rewrite (negbTE ne).
+  rewrite count_cat; move=> /IHxs ->; rewrite addn1; congr S.
+  elim: (enum_branch _ _) {IHxs}=> //= args' e ->; rewrite addn0.
+  apply/eqP; rewrite eqb0; apply/negP=> /PP [] /esym/eqP.
+  by rewrite (negbTE ne).
+set P := preim _ _.
+rewrite (@eq_count _ _ pred0) ?count_pred0 //.
+move=> args' /=; apply/negbTE; apply: contra ne.
+by move=> /eqP/Roll_inj/(congr1 (@CoqIndFunctor.constr _ _)) /= ->.
+Qed.
+
+End FinType.
+
+Definition pack :=
+  fun (T : Type) =>
+  fun (b : Countable.class_of T) bT & phant_id (Countable.class bT) b =>
+  fun s (sT : coqIndType s) & phant_id (CoqInd.sort sT) T =>
+  fun (ss : sig_inst Finite.sort) & phant_id s (sig_inst_sort ss) =>
+  fun (cT : CoqInd.mixin_of ss T) & phant_id (CoqInd.class sT) cT =>
+  fun (not_rec : all (all is_other) ss) =>
+    ltac:(
+      let ax := constr:(@enum_indP ss (IndEqType.Pack b (Ind.class (CoqInd.Pack cT))) not_rec) in
+      match type of ax with
+      | Finite.axiom ?e =>
+        let e' := (eval compute -[Finite.sort Equality.sort allpairs cat map] in e) in
+        exact (@FinMixin (Countable.Pack b) e' ax)
+      end).
+
+Module Import Exports.
+Notation "[ 'indFinMixin' 'for' T ]" :=
+  (let m := @pack T _ _ id _ _ id _ id _ id erefl in
+   ltac:(
+     let x := eval hnf in m in
+     exact x))
+  (at level 0, format "[ 'indFinMixin'  'for'  T ]") : form_scope.
+End Exports.
+
+End IndFinType.
+Export IndFinType.Exports.
+
 Module IndOrdType.
 
 Local Notation kind_class := (kind_class Ord.sort).
@@ -1253,9 +1357,9 @@ Qed.
 
 End OrdType.
 
-Definition ordMixin :=
+Definition pack :=
   fun (T : Type) =>
-  fun (b : Choice.class_of T) bT & phant_id (Choice.class bT) b =>
+  fun (b : Equality.mixin_of T) bT & phant_id (Equality.class bT) b =>
   fun s (sT : coqIndType s) & phant_id (CoqInd.sort sT) T =>
   fun (ss : sig_inst) & phant_id s (sig_inst_sort ss) =>
   fun (cT : CoqInd.mixin_of ss T) & phant_id (CoqInd.class sT) cT =>
@@ -1269,7 +1373,7 @@ Definition ordMixin :=
 
 Module Import Exports.
 Notation "[ 'indOrdMixin' 'for' T ]" :=
-  (let m := @ordMixin T _ _ id _ _ id _ id _ id in
+  (let m := @pack T _ _ id _ _ id _ id _ id in
    ltac:(
      let x := eval hnf in m in
      exact x))
@@ -1510,7 +1614,7 @@ Canonical seq_coqIndType :=
 
 End Instances.
 
-Module Example.
+Module RecursiveExample.
 
 Inductive tree (T : Type) :=
 | Leaf of nat
@@ -1558,8 +1662,41 @@ Canonical tree_countType (T : countType) :=
   Eval hnf in CountType (tree T) (tree_countMixin T).
 Definition tree_ordMixin (T : ordType) :=
   Eval simpl in [indOrdMixin for tree T].
-Set Printing Implicit.
 Canonical tree_ordType (T : ordType) :=
   Eval hnf in OrdType (tree T) (tree_ordMixin T).
 
-End Example.
+End RecursiveExample.
+
+Module FiniteExample.
+
+Inductive three := A of unit & bool | B | C.
+
+Definition three_signature : signature :=
+  [:: [:: Other unit; Other bool]; [::]; [::]].
+
+Definition three_coqIndMixin : CoqInd.mixin_of three_signature three.
+Proof.
+eexists (A, (B, (C, tt))) (fun S => @three_rect (fun _ => S))
+  (fun S fA fB fC x => match x with A x1 x2 => fA x1 x2 | B => fB | C => fC end);
+try by [abstract done|exact: three_rect].
+Defined.
+
+Canonical three_coqIndType :=
+  Eval hnf in CoqIndType _ three three_coqIndMixin.
+
+Definition three_eqMixin :=
+  Eval simpl in [indEqMixin for three].
+Canonical three_eqType :=
+  Eval hnf in EqType three three_eqMixin.
+Definition three_choiceMixin := [indChoiceMixin for three].
+Canonical three_choiceType :=
+  Eval hnf in ChoiceType three three_choiceMixin.
+Definition three_countMixin := [indCountMixin for three].
+Canonical three_countType :=
+  Eval hnf in CountType three three_countMixin.
+Definition three_finMixin :=
+  Eval simpl in [indFinMixin for three].
+Canonical three_finType :=
+  Eval hnf in FinType three three_finMixin.
+
+End FiniteExample.
