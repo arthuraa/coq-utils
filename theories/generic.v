@@ -746,6 +746,12 @@ Definition recursor_eq s (cs : constructors s) (r : recursor s) :=
 Definition destructor s :=
   forall S, hfun (fun a => hfun (type_of_kind T) a S) s (T -> S).
 
+Definition destructor_of_recursor s (rec : recursor s) : destructor s :=
+  fun S =>
+  hcurry (fun bs : hlist (fun a => hfun (type_of_kind T) a S) s =>
+            happ (rec S) (hmap (fun a (b : hfun (type_of_kind T) a S) =>
+                                  branch_of_hfun (hcurry (fun args => happ b (hmap (type_of_kind_map fst) args)))) bs)).
+
 Definition destructor_eq s (cs : constructors s) (d : destructor s) :=
   forall S,
   all_hlist (fun bs : hlist (fun ks => hfun (type_of_kind T) ks S) s =>
@@ -805,6 +811,61 @@ End Exports.
 
 End CoqInd.
 Export CoqInd.Exports.
+
+Class infer_arity T (P : T -> Type)
+  (branchT : Type) (a : arity) (C : hfun (type_of_kind T) a T) : Type.
+
+Instance infer_arity_end (T : Type) (P : T -> Type) (x : T) :
+  @infer_arity T P (P x) [::] x.
+
+Instance infer_arity_rec
+  (T : Type) (P : T -> Type)
+  (branchT : T -> Type) (a : arity) (C : T -> hfun (type_of_kind T) a T)
+  (H : forall x, @infer_arity T P (branchT x) a (C x)) :
+  @infer_arity T P (forall x, P x -> branchT x) (Rec :: a) C.
+
+Instance infer_arity_other
+  (T : Type) (P : T -> Type)
+  (R : Type) (branchT : R -> Type) (a : arity) (C : R -> hfun (type_of_kind T) a T)
+  (H : forall x, @infer_arity T P (branchT x) a (C x)) :
+  @infer_arity T P (forall x, branchT x) (Other R :: a) C.
+
+Class infer_sig T (P : T -> Type) (elimT : Type) s (Cs : CoqInd.constructors T s).
+
+Instance infer_sig_end (T : Type) (P : T -> Type) : @infer_sig T P (forall x : T, P x) [::] tt.
+
+Instance infer_sig_branch
+  T (P : T -> Type)
+  (branchT : Type) (a : arity) C (_ : @infer_arity T P branchT a C)
+  (elimT : Type) (sig : signature) Cs (_ : @infer_sig T P elimT sig Cs) :
+  @infer_sig T P (branchT -> elimT) (a :: sig) (C, Cs).
+
+Ltac unwind_recursor P T t :=
+  match goal with
+  | |- ?F -> ?G =>
+    let X := fresh "X" in intros X; unwind_recursor P T (t X)
+  | |- _ => case; intros; apply t
+  end.
+
+Ltac coq_ind_mixin t :=
+  match type of t with
+  | forall (P : ?T -> Type), @?elimT P =>
+    let sCs := constr:((fun s Cs (_ : forall P, @infer_sig T P (elimT P) s Cs) => (s, Cs)) _ _ _) in
+    let sCs := eval simpl in sCs in
+    refine (
+        let rec := fun S => t (fun _ => S) in
+        let t' := t in
+        let d : (forall (P : T -> Type), elimT P) := ltac:(intros P; simpl; unwind_recursor P T (t' P)) in
+        @CoqInd.Mixin
+          sCs.1 T sCs.2 rec
+          (@CoqInd.destructor_of_recursor
+             T sCs.1 (fun S => d (fun _ => S))) ltac:(abstract done) ltac:(abstract done) t
+      )
+  end.
+
+Notation "[ 'coqIndMixin' 'for' rect ]" :=
+  (ltac:(coq_ind_mixin rect))
+  (at level 0) : form_scope.
 
 Module CoqIndFunctor.
 
@@ -1388,229 +1449,45 @@ Section Instances.
 
 Variables (a a1 a2 : Type).
 
-Definition unit_signature : signature := [:: [::]].
-
-Definition unit_constructors :
-  CoqInd.constructors unit unit_signature := (tt, tt).
-
-Definition unit_rec :
-  CoqInd.recursor unit unit_signature :=
-  fun S => @unit_rect (fun _ => S).
-
-Definition unit_case :
-  CoqInd.destructor unit unit_signature :=
-  fun S ftt x => match x with tt => ftt end.
-
-Lemma unit_recE :
-  CoqInd.recursor_eq unit_constructors unit_rec.
-Proof. by []. Qed.
-
-Lemma unit_caseE :
-  CoqInd.destructor_eq unit_constructors unit_case.
-Proof. by []. Qed.
-
-Lemma unit_indP P : CoqInd.ind_at P unit_constructors.
-Proof. exact: unit_rect. Qed.
-
-Definition unit_coqIndMixin := CoqIndMixin unit_recE unit_caseE unit_indP.
+Definition unit_coqIndMixin :=
+  Eval simpl in [coqIndMixin for unit_rect].
 Canonical unit_coqIndType :=
   Eval hnf in CoqIndType _ unit unit_coqIndMixin.
 
-Definition void_signature : signature := [::].
-
-Definition void_constructors :
-  CoqInd.constructors void void_signature := tt.
-
-Definition void_rec :
-  CoqInd.recursor void void_signature :=
-  fun S => @Empty_set_rect (fun _ => S).
-
-Definition void_case :
-  CoqInd.destructor void void_signature :=
-  fun S x => match x with end.
-
-Lemma void_recE :
-  CoqInd.recursor_eq void_constructors void_rec.
-Proof. by []. Qed.
-
-Lemma void_caseE :
-  CoqInd.destructor_eq void_constructors void_case.
-Proof. by []. Qed.
-
-Lemma void_indP P : CoqInd.ind_at P void_constructors.
-Proof. exact: Empty_set_rect. Qed.
-
-Definition void_coqIndMixin := CoqIndMixin void_recE void_caseE void_indP.
+Definition void_coqIndMixin :=
+  Eval simpl in [coqIndMixin for Empty_set_rect].
 Canonical void_coqIndType :=
   Eval hnf in CoqIndType _ void void_coqIndMixin.
 
-Definition bool_signature : signature := [:: [::]; [::]].
-
-Definition bool_constructors :
-  CoqInd.constructors bool bool_signature :=
-  (true, (false, tt)).
-
-Definition bool_rec :
-  CoqInd.recursor bool bool_signature :=
-  fun S => @bool_rect (fun _ => S).
-
-Definition bool_case :
-  CoqInd.destructor bool bool_signature :=
-  fun S ftrue ffalse b => if b then ftrue else ffalse.
-
-Lemma bool_recE : CoqInd.recursor_eq bool_constructors bool_rec.
-Proof. by []. Qed.
-
-Lemma bool_caseE : CoqInd.destructor_eq bool_constructors bool_case.
-Proof. by []. Qed.
-
-Lemma bool_indP P : CoqInd.ind_at P bool_constructors.
-Proof. exact: bool_rect. Qed.
-
-Definition bool_coqIndMixin := CoqIndMixin bool_recE bool_caseE bool_indP.
+Definition bool_coqIndMixin :=
+  Eval simpl in [coqIndMixin for bool_rect].
 Canonical bool_coqIndType :=
   Eval hnf in CoqIndType _ bool bool_coqIndMixin.
 
-Definition nat_signature : signature := [:: [::]; [:: Rec]].
-
-Definition nat_constructors :
-  CoqInd.constructors nat nat_signature :=
-  (O, (S, tt)).
-
-Definition nat_rec : CoqInd.recursor nat nat_signature :=
-  fun S => @nat_rect (fun _ => S).
-
-Definition nat_case : CoqInd.destructor nat nat_signature :=
-  fun S fz fs n => if n is n.+1 then fs n else fz.
-
-Lemma nat_recE : CoqInd.recursor_eq nat_constructors nat_rec.
-Proof. by []. Qed.
-
-Lemma nat_caseE : CoqInd.destructor_eq nat_constructors nat_case.
-Proof. by []. Qed.
-
-Lemma nat_indP P : CoqInd.ind_at P nat_constructors.
-Proof. exact: nat_rect. Qed.
-
-Definition nat_coqIndMixin := CoqIndMixin nat_recE nat_caseE nat_indP.
-Canonical nat_coqIndType := CoqIndType _ nat nat_coqIndMixin.
-
-Definition option_signature : signature :=
-  [:: [:: Other a]; [::]].
-
-Definition option_constructors :
-  CoqInd.constructors (option a) option_signature :=
-  (@Some a, (@None a, tt)).
-
-Definition option_rec :
-  CoqInd.recursor (option a) option_signature :=
-  fun S => @option_rect a (fun _ => S).
-
-Definition option_case :
-  CoqInd.destructor (option a) option_signature :=
-  fun S fsome fnone o =>
-    if o is Some x then fsome x else fnone.
-
-Lemma option_recE :
-  CoqInd.recursor_eq option_constructors option_rec.
-Proof. by []. Qed.
-
-Lemma option_caseE :
-  CoqInd.destructor_eq option_constructors option_case.
-Proof. by []. Qed.
-
-Lemma option_indP P : CoqInd.ind_at P option_constructors.
-Proof. exact: option_rect. Qed.
+Definition nat_coqIndMixin :=
+  Eval simpl in [coqIndMixin for nat_rect].
+Canonical nat_coqIndType :=
+  Eval hnf in CoqIndType _ nat nat_coqIndMixin.
 
 Definition option_coqIndMixin :=
-  CoqIndMixin option_recE option_caseE option_indP.
+  Eval simpl in [coqIndMixin for @option_rect a].
 Canonical option_coqIndType :=
   Eval hnf in CoqIndType _ (option a) option_coqIndMixin.
 
-Definition sum_signature : signature :=
-  [:: [:: Other a1]; [:: Other a2]].
+Definition sum_coqIndMixin :=
+  Eval simpl in [coqIndMixin for @sum_rect a1 a2].
+Canonical sum_coqIndType :=
+  Eval hnf in CoqIndType _ _ sum_coqIndMixin.
 
-Definition sum_constructors :
-  CoqInd.constructors (a1 + a2)%type sum_signature :=
-  (@inl _ _, (@inr _ _, tt)).
-
-Definition sum_rec :
-  CoqInd.recursor (a1 + a2)%type sum_signature :=
-  fun S => @sum_rect _ _ (fun _ => S).
-
-Definition sum_case :
-  CoqInd.destructor (a1 + a2)%type sum_signature :=
-  fun S finl finr x =>
-    match x with inl x => finl x | inr x => finr x end.
-
-Lemma sum_recE : CoqInd.recursor_eq sum_constructors sum_rec.
-Proof. by []. Qed.
-
-Lemma sum_caseE : CoqInd.destructor_eq sum_constructors sum_case.
-Proof. by []. Qed.
-
-Lemma sum_indP P : CoqInd.ind_at P sum_constructors.
-Proof. exact: sum_rect. Qed.
-
-Definition sum_coqIndMixin := CoqIndMixin sum_recE sum_caseE sum_indP.
-Canonical sum_coqIndType := Eval hnf in CoqIndType _ (a1 + a2)%type sum_coqIndMixin.
-
-Definition prod_signature : signature :=
-  [:: [:: Other a1; Other a2]].
-
-Definition prod_constructors :
-  CoqInd.constructors (a1 * a2)%type prod_signature :=
-  (@pair _ _, tt).
-
-Definition prod_rec :
-  CoqInd.recursor (a1 * a2)%type prod_signature :=
-  fun S => @prod_rect _ _ (fun _ => S).
-
-Definition prod_case :
-  CoqInd.destructor (a1 *  a2)%type prod_signature :=
-  fun S c p => let: (x, y) := p in c x y.
-
-Lemma prod_recE : CoqInd.recursor_eq prod_constructors prod_rec.
-Proof. by []. Qed.
-
-Lemma prod_caseE : CoqInd.destructor_eq prod_constructors prod_case.
-Proof. by []. Qed.
-
-Lemma prod_indP P : CoqInd.ind_at P prod_constructors.
-Proof. exact: prod_rect. Qed.
-
-Definition prod_coqIndMixin := CoqIndMixin prod_recE prod_caseE prod_indP.
+Definition prod_coqIndMixin :=
+  Eval simpl in [coqIndMixin for @prod_rect a1 a2].
 Canonical prod_coqIndType :=
-  Eval hnf in CoqIndType _ (a1 * a2)%type prod_coqIndMixin.
+  Eval hnf in CoqIndType _ _ prod_coqIndMixin.
 
-Definition seq_signature : signature :=
-  [:: [::]; [:: Other a; Rec]].
-
-Definition seq_constructors :
-  CoqInd.constructors (seq a) seq_signature :=
-  (@nil _, (@cons _, tt)).
-
-Definition seq_rec :
-  CoqInd.recursor (seq a) seq_signature :=
-  fun S => @list_rect _ (fun _ => S).
-
-Definition seq_case :
-  CoqInd.destructor (seq a) seq_signature :=
-  fun S fnil fcons l =>
-    match l with nil => fnil | cons x y => fcons x y end.
-
-Lemma seq_recE : CoqInd.recursor_eq seq_constructors seq_rec.
-Proof. by []. Qed.
-
-Lemma seq_caseE : CoqInd.destructor_eq seq_constructors seq_case.
-Proof. by []. Qed.
-
-Lemma seq_indP P : CoqInd.ind_at P seq_constructors.
-Proof. exact: list_rect. Qed.
-
-Definition seq_coqIndMixin := CoqIndMixin seq_recE seq_caseE seq_indP.
+Definition seq_coqIndMixin :=
+  Eval simpl in [coqIndMixin for @list_rect a].
 Canonical seq_coqIndType :=
-  Eval hnf in CoqIndType _ (seq a) seq_coqIndMixin.
+  Eval hnf in CoqIndType _ _ seq_coqIndMixin.
 
 End Instances.
 
@@ -1621,32 +1498,10 @@ Inductive tree (T : Type) :=
 | Node of T & tree T & tree T.
 Arguments Leaf {_} _.
 
-Definition tree_signature (T : Type) : signature :=
-  [:: [:: Other nat]; [:: Other T; Rec; Rec]].
-
-Definition tree_constructors (T : Type) :
-  CoqInd.constructors (tree T) (tree_signature T) :=
-  (@Leaf T, (@Node T, tt)).
-
-Definition tree_case (T : Type) :
-  CoqInd.destructor (tree T) (tree_signature T) :=
-  fun S fLeaf fNode t =>
-    match t with Leaf n => fLeaf n | Node x t1 t2 => fNode x t1 t2 end.
-
-Lemma tree_recE T : CoqInd.recursor_eq (tree_constructors T) (fun S => @tree_rect T (fun _ => S)).
-Proof. by []. Qed.
-
-Lemma tree_caseE T : CoqInd.destructor_eq (tree_constructors T) (@tree_case T).
-Proof. by []. Qed.
-
-Lemma tree_indP T P : CoqInd.ind_at P (tree_constructors T).
-Proof. exact: tree_rect. Qed.
-
 Definition tree_coqIndMixin T :=
-  Eval cbv delta [tree_constructors tree_signature tree_case] in
-  CoqIndMixin (@tree_recE T) (@tree_caseE T) (@tree_indP T).
+  Eval simpl in [coqIndMixin for @tree_rect T].
 Canonical tree_coqIndType T :=
-  Eval hnf in CoqIndType _ (tree T) (tree_coqIndMixin T).
+  Eval hnf in CoqIndType _ _ (tree_coqIndMixin T).
 
 Definition tree_eqMixin (T : eqType) :=
   Eval simpl in [indEqMixin for tree T].
@@ -1671,18 +1526,10 @@ Module FiniteExample.
 
 Inductive three := A of unit & bool | B | C.
 
-Definition three_signature : signature :=
-  [:: [:: Other unit; Other bool]; [::]; [::]].
-
-Definition three_coqIndMixin : CoqInd.mixin_of three_signature three.
-Proof.
-eexists (A, (B, (C, tt))) (fun S => @three_rect (fun _ => S))
-  (fun S fA fB fC x => match x with A x1 x2 => fA x1 x2 | B => fB | C => fC end);
-try by [abstract done|exact: three_rect].
-Defined.
-
+Definition three_coqIndMixin :=
+  Eval simpl in [coqIndMixin for three_rect].
 Canonical three_coqIndType :=
-  Eval hnf in CoqIndType _ three three_coqIndMixin.
+  Eval hnf in CoqIndType _ _ three_coqIndMixin.
 
 Definition three_eqMixin :=
   Eval simpl in [indEqMixin for three].
