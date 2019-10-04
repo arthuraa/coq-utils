@@ -1,12 +1,14 @@
+From Coq Require Import String.
+
 From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype tuple bigop
   generic_quotient.
 
-From extructures Require Import ord fset fmap fperm.
-
 From void Require Import void.
 
 From deriving Require Import base deriving.
+
+From extructures Require Import ord fset fmap fperm.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -672,6 +674,10 @@ Canonical bool_trivialNominalType := Eval hnf in [trivialNominalType for bool].
 
 Canonical nat_nominalType := Eval hnf in [nominalType for nat by //].
 Canonical nat_trivialNominalType := Eval hnf in [trivialNominalType for nat].
+
+Canonical string_nominalType := Eval hnf in [nominalType for string by //].
+Canonical string_trivialNominalType :=
+  Eval hnf in [trivialNominalType for string].
 
 Global Instance funcomp_eqvar (T S R : nominalType) : {eqvar @funcomp T S R}.
 Proof. by move=> s [] _ <- /= f1 f2 f12 g1 g2 g12 x1 x2 x12 /=; finsupp. Qed.
