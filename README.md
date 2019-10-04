@@ -9,8 +9,7 @@ This package contains miscellaneous useful Coq libraries:
 
 - `hseq`: heterogeneous lists.
 
-- `void`, `string`: basic infrastructure for some types in the Coq standard
-  library.
+- `string`: basic infrastructure for some types in the Coq standard library.
 
 
 The development is based on the [SSReflect][3] proof language and on the
@@ -25,6 +24,10 @@ well as the following [OPAM][5] packages:
 
 - `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra` v1.9
 - `coq-extructures` v0.2
+
+The following libraries outside of OPAM are also needed:
+- `coq-void` (https://github.com/arthuraa/coq-void)
+- `deriving` (https://github.com/arthuraa/deriving)
 
 To compile the package, simply run
 

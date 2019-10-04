@@ -4,7 +4,9 @@ From mathcomp Require Import
 
 From extructures Require Import ord fset fmap fperm.
 
-Require Import void generic.
+From void Require Import void.
+
+From deriving Require Import base deriving.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
