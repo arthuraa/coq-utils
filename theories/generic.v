@@ -850,17 +850,19 @@ Ltac unwind_recursor P T t :=
 Ltac coq_ind_mixin t :=
   match type of t with
   | forall (P : ?T -> Type), @?elimT P =>
+    let t := eval compute in t in
     let sCs := constr:((fun s Cs (_ : forall P, @infer_sig T P (elimT P) s Cs) => (s, Cs)) _ _ _) in
     let sCs := eval simpl in sCs in
+    let d_of_r := eval unfold CoqInd.destructor_of_recursor in @CoqInd.destructor_of_recursor in
     refine (
-        let rec := fun S => t (fun _ => S) in
-        let t' := t in
-        let d : (forall (P : T -> Type), elimT P) := ltac:(intros P; simpl; unwind_recursor P T (t' P)) in
+        let t := t in
+        let d : (forall (P : T -> Type), elimT P) := ltac:(intros P; simpl; unwind_recursor P T (t P)) in
         @CoqInd.Mixin
-          sCs.1 T sCs.2 rec
-          (@CoqInd.destructor_of_recursor
-             T sCs.1 (fun S => d (fun _ => S))) ltac:(abstract done) ltac:(abstract done) t
-      )
+          sCs.1 T sCs.2
+          (fun S => t (fun _ => S))
+          (d_of_r T sCs.1 (fun S => d (fun _ => S))) _ _ _
+      );
+    try by [abstract done|exact t]
   end.
 
 Notation "[ 'coqIndMixin' 'for' rect ]" :=
