@@ -6,7 +6,8 @@ From mathcomp Require Import
 
 From void Require Import void.
 
-From deriving Require Import base deriving.
+From deriving Require base.
+From deriving Require Import deriving.
 
 From extructures Require Import ord fset fmap fperm.
 
@@ -357,6 +358,8 @@ End NameNominal.
 End NominalTheory.
 
 Module IndNominalType.
+
+Import base.
 
 Section Def.
 
