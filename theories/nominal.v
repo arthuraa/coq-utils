@@ -365,8 +365,8 @@ Section Def.
 
 Open Scope fset_scope.
 
-Variables (sig : sig_inst Nominal.sort).
-Let F := CoqIndFunctor.coqInd_functor sig.
+Variables (Σ : sig_inst Nominal.sort).
+Let F := CoqIndFunctor.coqInd_functor Σ.
 Variables T : indType F.
 
 Implicit Types (x y : T) (n : name).
@@ -375,24 +375,23 @@ Let ind_rename s : T -> T :=
   rec (fun args : F (T * T)%type =>
          Roll (CoqIndFunctor.CoqInd
                  (@arity_rec
-                    _ Nominal.sort (fun a : arity => hlist (type_of_kind (T * T)) a -> hlist (type_of_kind T) a)
+                    _ Nominal.sort (fun As => hlist (type_of_arg (T * T)) As -> hlist (type_of_arg T) As)
                     (fun _ => tt)
-                    (fun (R : nominalType) a loop args => (rename s args.1, loop args.2))
-                    (fun   a loop args => (args.1.2, loop args.2))
+                    (fun (R : nominalType) As loop args => (rename s args.1, loop args.2))
+                    (fun   As loop args => (args.1.2, loop args.2))
                     (nth_fin (CoqIndFunctor.constr args))
-                    (nth_hlist (sig_inst_class sig) (CoqIndFunctor.constr args))
+                    (nth_hlist (sig_inst_class Σ) (CoqIndFunctor.constr args))
                     (CoqIndFunctor.args args)
       ))).
-
 Let ind_names :=
   rec (fun args : F (T * {fset name})%type =>
          @arity_rec
-           _ Nominal.sort (fun a => hlist (type_of_kind (T * {fset name})) a -> {fset name})
+           _ Nominal.sort (fun As => hlist (type_of_arg (T * {fset name})) As -> {fset name})
            (fun _ => fset0)
-           (fun R a loop args => names args.1 :|: loop args.2)
-           (fun   a loop args => args.1.2 :|: loop args.2)
+           (fun R As loop args => names args.1 :|: loop args.2)
+           (fun   As loop args => args.1.2 :|: loop args.2)
            _
-           (nth_hlist (sig_inst_class sig) (CoqIndFunctor.constr args))
+           (nth_hlist (sig_inst_class Σ) (CoqIndFunctor.constr args))
            (CoqIndFunctor.args args)).
 
 Lemma ind_renameP : Nominal.axioms ind_rename ind_names.
@@ -402,14 +401,14 @@ split.
   rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _).
   congr (Roll (CoqIndFunctor.CoqInd _)).
   elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args => //=.
-  + by move=> R a ac IH [x args] /=; rewrite {}IH renameA.
-  + by move=> a ac IH [[x xP] args] /=; rewrite {}IH xP.
+  + by move=> R As cAs IH [x args] /=; rewrite {}IH renameA.
+  + by move=> As cAs IH [[x xP] args] /=; rewrite {}IH xP.
 - move=> n n'; elim/indP=> [[i args]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
   rewrite /ind_names !recE /= -![rec _]/(ind_names) => Hn Hn' /=.
   do 2![apply: congr1]=> /=.
   elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args Hn Hn'=> //=.
-  + move=> R a ac IH [x args] /=.
+  + move=> R As cAs IH [x args] /=.
     rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
     case/norP=> n'_args n'_rargs.
     by rewrite namesNNE // IH.
@@ -422,11 +421,11 @@ split.
   rewrite /ind_names !recE /= -![rec _]/(ind_names) /=.
   move=> Hn /Roll_inj/CoqIndFunctor.inj /= Hargs.
   elim/arity_ind: {i} _ / (nth_hlist _ i) args Hn Hargs=> //=.
-  + move=> R a ac IH [x args] /= Hn [Hx Hargs].
+  + move=> R As cAs IH [x args] /= Hn [Hx Hargs].
     case/fsetUP: Hn=> Hn.
       apply/fsetUP; left; exact: namesTeq Hn Hx.
     by apply/fsetUP; right; apply: IH.
-  + move=> a ac IH [[x xP] args] /= Hn [Hx Hargs].
+  + move=> As cAs IH [[x xP] args] /= Hn [Hx Hargs].
     case/fsetUP: Hn=> Hn.
       apply/fsetUP; left; exact: xP Hn Hx.
     by apply/fsetUP; right; apply: IH.
@@ -436,8 +435,8 @@ End Def.
 
 Definition nominalMixin :=
   fun (T : Type) =>
-  fun s (sT_ind : coqIndType s) & phant_id (CoqInd.sort sT_ind) T =>
-  fun ss & phant_id (sig_inst_sort ss) s =>
+  fun Σ (sT_ind : coqIndType Σ) & phant_id (CoqInd.sort sT_ind) T =>
+  fun sΣ & phant_id (sig_inst_sort sΣ) Σ =>
   fun cT_ind & phant_id (CoqInd.class sT_ind) cT_ind =>
   fun sT_ord & phant_id (Ord.sort sT_ord) T =>
   fun (cT : Ord.class_of T) & phant_id (Ord.class sT_ord) cT =>
@@ -445,11 +444,11 @@ Definition nominalMixin :=
     let cl t :=
       eval compute -[name_ordType fsetU fset0 names rename fset_of
                      Nominal.sort FPerm.fperm_of Ord.sort] in t in
-    match type of (@ind_renameP ss (@CoqInd.Pack ss T cT_ind)) with
+    match type of (@ind_renameP sΣ (@CoqInd.Pack sΣ T cT_ind)) with
     | Nominal.axioms ?r ?n =>
       let r' := cl r in
       let n' := cl n in
-      exact: (@NominalMixin T r' n' (@ind_renameP ss (CoqInd.Pack cT_ind)))
+      exact: (@NominalMixin T r' n' (@ind_renameP sΣ (CoqInd.Pack cT_ind)))
     end).
 
 Module Import Exports.
