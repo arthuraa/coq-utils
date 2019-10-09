@@ -12,11 +12,12 @@ depends: [
   "coq-mathcomp-ssreflect" {(>= "1.9" & < "1.10~") | (= "dev")}
   "coq-mathcomp-fingroup" {(>= "1.9" & < "1.10~") | (= "dev")}
   "coq-mathcomp-algebra" {(>= "1.9" & < "1.10~") | (= "dev")}
+  "coq-void" {>= "0.1" & < "0.2~"}
+  "coq-deriving" {= "dev"}
   "coq-extructures" {(>= "0.2.0" & < "0.3~") | (= "dev")}
 ]
 flags: light-uninstall
 build: [
-  ["coq_makefile" "-f" "_CoqProject" "-o" "Makefile"]
   [make "-j%{jobs}%"]
 ]
 install: [make "install"]
