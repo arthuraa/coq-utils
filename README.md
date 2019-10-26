@@ -19,19 +19,16 @@ with structure).
 
 ## Installation
 
-The package currently needs to be compiled by hand.  It requires Coq v8.9 as
+The package currently needs to be compiled by hand.  It requires Coq v8.10 as
 well as the following [OPAM][5] packages:
 
 - `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra` v1.9
-- `coq-extructures` v0.2
-
-The following libraries outside of OPAM are also needed:
-- `coq-void` (https://github.com/arthuraa/coq-void)
-- `deriving` (https://github.com/arthuraa/deriving)
+- `coq-extructures` v0.2.1
+- `coq-void` v0.1
+- `coq-deriving` (available in the `extra-dev` repository)
 
 To compile the package, simply run
 
-    coq_makefile -f _CoqProject -o Makefile
     make
 
 After compilation, you can install the package by running
