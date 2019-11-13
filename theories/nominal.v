@@ -377,10 +377,10 @@ Let ind_rename s : T -> T :=
                  (@arity_rec
                     _ Nominal.sort (fun As => hlist (type_of_arg (T * T)) As -> hlist (type_of_arg T) As)
                     (fun _ => tt)
-                    (fun (R : nominalType) As loop args => (rename s args.1, loop args.2))
-                    (fun   As loop args => (args.1.2, loop args.2))
+                    (fun (R : nominalType) As loop args => rename s args.(hd) ::: loop args.(tl))
+                    (fun   As loop args => args.(hd).2 ::: loop args.(tl))
                     (nth_fin (IndF.constr args))
-                    (nth_hlist (sig_inst_class Σ) (IndF.constr args))
+                    (hnth (sig_inst_class Σ) (IndF.constr args))
                     (IndF.args args)
       ))).
 Let ind_names :=
@@ -388,10 +388,10 @@ Let ind_names :=
          @arity_rec
            _ Nominal.sort (fun As => hlist (type_of_arg (T * {fset name})) As -> {fset name})
            (fun _ => fset0)
-           (fun R As loop args => names args.1 :|: loop args.2)
-           (fun   As loop args => args.1.2 :|: loop args.2)
+           (fun R As loop args => names args.(hd) :|: loop args.(tl))
+           (fun   As loop args => args.(hd).2 :|: loop args.(tl))
            _
-           (nth_hlist (sig_inst_class Σ) (IndF.constr args))
+           (hnth (sig_inst_class Σ) (IndF.constr args))
            (IndF.args args)).
 
 Lemma ind_renameP : Nominal.axioms ind_rename ind_names.
@@ -400,14 +400,14 @@ split.
 - move=> s1 s2; elim/indP=> [[i args]].
   rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _).
   congr (Roll (IndF.Cons _)).
-  elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args => //=.
+  elim/arity_ind: {i} (nth_fin i) / (hnth _ i) args => //=.
   + by move=> R As cAs IH [x args] /=; rewrite {}IH renameA.
   + by move=> As cAs IH [[x xP] args] /=; rewrite {}IH xP.
 - move=> n n'; elim/indP=> [[i args]].
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
   rewrite /ind_names !recE /= -![rec _]/(ind_names) => Hn Hn' /=.
   do 2![apply: congr1]=> /=.
-  elim/arity_ind: {i} (nth_fin i) / (nth_hlist _ i) args Hn Hn'=> //=.
+  elim/arity_ind: {i} (nth_fin i) / (hnth _ i) args Hn Hn'=> //=.
   + move=> R As cAs IH [x args] /=.
     rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
     case/norP=> n'_args n'_rargs.
@@ -420,7 +420,7 @@ split.
   rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
   rewrite /ind_names !recE /= -![rec _]/(ind_names) /=.
   move=> Hn /Roll_inj/IndF.inj /= Hargs.
-  elim/arity_ind: {i} _ / (nth_hlist _ i) args Hn Hargs=> //=.
+  elim/arity_ind: {i} _ / (hnth _ i) args Hn Hargs=> //=.
   + move=> R As cAs IH [x args] /= Hn [Hx Hargs].
     case/fsetUP: Hn=> Hn.
       apply/fsetUP; left; exact: namesTeq Hn Hx.
