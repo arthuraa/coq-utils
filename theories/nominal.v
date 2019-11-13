@@ -681,8 +681,8 @@ Canonical string_nominalType := Eval hnf in [nominalType for string by //].
 Canonical string_trivialNominalType :=
   Eval hnf in [trivialNominalType for string].
 
-Global Instance funcomp_eqvar (T S R : nominalType) : {eqvar @funcomp T S R}.
-Proof. by move=> s [] _ <- /= f1 f2 f12 g1 g2 g12 x1 x2 x12 /=; finsupp. Qed.
+Global Instance funcomp_eqvar (T S R : nominalType) : {eqvar @comp T S R}.
+Proof. by move=> s /= f1 f2 f12 g1 g2 g12 x1 x2 x12 /=; finsupp. Qed.
 
 Global Instance mem_pred_nominalRel T {eT : nominalRel T} : nominalRel (mem_pred T) :=
   fun s P Q => forall x y : T, nomR s x y -> nomR s (x \in P) (y \in Q).
