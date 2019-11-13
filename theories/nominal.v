@@ -959,13 +959,13 @@ Proof. move=> <- ??; case: x1=> * /=; finsupp. Qed.
 
 End OptionNominalType.
 
-Global Instance obind_eqvar (T S : nominalType) : {eqvar (@obind T S)}.
+Global Instance obind_eqvar (T' S' : nominalType) : {eqvar (@obind T' S')}.
 Proof. by move=> s f g fg [x|] _ <- //=; apply: fg. Qed.
 
-Global Instance oapp_eqvar (T S : nominalType) : {eqvar (@oapp T S)}.
+Global Instance oapp_eqvar (T' S' : nominalType) : {eqvar (@oapp T' S')}.
 Proof. by move=> s f g fg ??? [x|] _ <- //=; finsupp. Qed.
 
-Global Instance omap_eqvar (T S : nominalType) : {eqvar (@omap T S)}.
+Global Instance omap_eqvar (T' S' : nominalType) : {eqvar (@omap T' S')}.
 Proof. by move=> s f g fg [x|] /= y <- //=; finsupp. Qed.
 
 Section OptionTrivial.
