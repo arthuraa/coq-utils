@@ -23,7 +23,7 @@ The package currently needs to be compiled by hand.  It requires Coq v8.10 as
 well as the following [OPAM][5] packages:
 
 - `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra` v1.9
-- `coq-extructures` v0.2.1
+- `coq-extructures` (`dev` version; available in the `extra-dev` repository)
 - `coq-void` v0.1
 - `coq-deriving` (available in the `extra-dev` repository)
 
