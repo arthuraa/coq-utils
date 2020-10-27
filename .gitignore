@@ -2,6 +2,8 @@
 *.glob
 *.v.d
 *.vo
+*.vok
+*.vos
 *.aux
 .coq-native/
 CoqMakefile
