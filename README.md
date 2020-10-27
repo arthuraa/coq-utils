@@ -19,12 +19,12 @@ with structure).
 
 ## Installation
 
-The package currently needs to be compiled by hand.  It requires Coq v8.10 as
-well as the following [OPAM][5] packages:
+The package currently needs to be compiled by hand.  The requirements are:
 
-- `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra` v1.9
+- Coq v8.10 -- v8.12
+- `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra`
+  v1.9 -- v1.11
 - `coq-extructures` (`dev` version; available in the `extra-dev` repository)
-- `coq-void` v0.1
 - `coq-deriving` (available in the `extra-dev` repository)
 
 To compile the package, simply run
