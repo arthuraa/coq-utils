@@ -343,7 +343,7 @@ Lemma id_bitwise2 b w :
   bits_of_word w = [ffun=> b] ->
   left_id w bitwise2.
 Proof.
-move=> Hid /(canRL bits_of_wordK) -> {w} w; rewrite /bitwise2 word_of_bitsK.
+move=> Hid /(canRL bits_of_wordK) -> {} w; rewrite /bitwise2 word_of_bitsK.
 by apply: (canLR bits_of_wordK); apply/ffunP=> i; rewrite /= !ffunE Hid.
 Qed.
 
@@ -432,6 +432,8 @@ Arguments shlw {_} _ _.
 Arguments andw {_} _ _.
 Arguments orw {_} _ _.
 Arguments xorw {_} _ _.
+
+Declare Scope word_scope.
 
 Delimit Scope word_scope with w.
 Notation "+%w" := addw.

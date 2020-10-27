@@ -103,7 +103,7 @@ case: fpickP=> [s /eqP Ps|] //=.
   move: (dis); rewrite in_fsetU negb_or fdisjointC.
   move/fdisjointP/(_ n); rewrite in_fsetU n_in_D orbT=> /(_ erefl) nN //=.
   rewrite nN /= (_ : s @: (A :\: D) = A :\: D) ?in_fsetD ?n_in_D //.
-  rewrite -[RHS]imfset_id; apply/eq_in_imfset=> {n n_in_D nN} n.
+  rewrite -[RHS]imfset_id; apply/eq_in_imfset=> {n_in_D nN} n.
   rewrite in_fsetD=> /andP [nD nA]; apply/suppPn.
   move/fsubsetP/(_ n)/contra: sub; apply.
   rewrite in_fsetU in_fsetI nA (negbTE nD) /=.
@@ -781,7 +781,7 @@ rewrite /seq_rename /seq_names; split.
 - by move=> ???; rewrite -map_comp (eq_map (@renameA T' _ _)).
 - move=> n n' xs h1 h2.
   have h: forall n x, n \notin seq_names xs -> x \in xs -> n \notin names x.
-    move=> {n n' h1 h2} n x Pn /seq_tnthP [i ->]; apply: contra Pn.
+    move=> {n' h1 h2} n x Pn /seq_tnthP [i ->]; apply: contra Pn.
     rewrite /seq_names big_tnth; move: n; apply/fsubsetP.
     apply/bigcup_sup=> //; exact: mem_index_enum.
   rewrite /seq_rename -[in RHS](map_id xs); apply/eq_in_map=> x Px.
@@ -1010,7 +1010,7 @@ rewrite /fset_rename /fset_names; split.
     by eexists; eauto; apply: mem_tnth.
   move: x_in Pn; rewrite -{1}e => /imfsetP [y Py ->]; rewrite names_rename.
   rewrite (mem_imfset_can _ _ (fpermK _) (fpermKV _)) fperm2V fperm2L.
-  case/seq_tnthP: Py=> {y} [y ->]; move: {e} n'; apply/fsubsetP.
+  case/seq_tnthP: Py=> [{}y ->]; move: {e} n'; apply/fsubsetP.
   by apply/(@bigcup_sup _ _ _ _ _ (fun x => names _)).
 Qed.
 
@@ -1182,7 +1182,7 @@ split.
   set m1 := mkfmapfp _ (rename s2 @: domm m).
   have domm_m1: domm m1 = rename s2 @: domm m.
     apply/eq_fset=> y; apply/(sameP idP)/(iffP idP).
-      case/imfsetP=> [{y} y Py ->]; apply/dommP.
+      case/imfsetP=> [{} y Py ->]; apply/dommP.
       case/dommP: (Py)=> [v m_y].
       exists (rename s2 v); rewrite /m1 mkfmapfpE (mem_imfset (rename s2) Py).
       by rewrite renameK m_y.
@@ -1236,7 +1236,7 @@ Proof. by move=> s m _ <- k _ <-; rewrite renamemE renameK. Qed.
 Lemma getm_nomR s m1 m2 : nomR s (getm m1) (getm m2) -> nomR s m1 m2.
 Proof.
 move=> m1m2; apply/eq_fmap=> k.
-rewrite -[k](renameKV s); move: (rename s^-1 k) => {k} k.
+rewrite -[k](renameKV s); move: (rename s^-1 k) => {} k.
 move/(_ k (rename s k) erefl): m1m2 => <-.
 by symmetry; apply: getm_eqvar.
 Qed.
@@ -1292,7 +1292,7 @@ Global Instance domm_eqvar : {eqvar (@domm T S)}.
 Proof.
 move=> s m _ <-.
 apply/esym/eq_fset=> k; apply/(sameP idP)/(iffP idP).
-  rewrite renamefsE=> /imfsetP [{k} k Pk ->].
+  rewrite renamefsE=> /imfsetP [{} k Pk ->].
   move/dommP: Pk=> [v Pv]; apply/dommP; exists (rename s v).
   by rewrite renamemE renameK Pv.
 move=> /dommP [v]; rewrite renamemE renamefsE=> Pv.
@@ -1342,17 +1342,17 @@ apply/andP; split; first by eapply nom_finsuppP; finsupp.
 apply/fsubsetP=> n /fsetUP []; case/namesmP=> [k v|k v] get_k Pn.
 - apply/namesmP; eapply PMFreeNamesKey; eauto.
   by rewrite unionmE get_k.
-- have {get_k} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k.
+- have {} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k.
   by apply/namesmP; eapply PMFreeNamesVal; eauto.
 - case get_k': (m1 k) => [v'|] //=.
     have: k \in domm m1 by rewrite mem_domm get_k'.
     by move=> /dis; rewrite mem_domm get_k.
-  have {get_k} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k'.
+  have {} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k'.
   by apply/namesmP; eapply PMFreeNamesKey; eauto.
 case get_k': (m1 k) => [v'|] //=.
   have: k \in domm m1 by rewrite mem_domm get_k'.
   by move=> /dis; rewrite mem_domm get_k.
-have {get_k} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k'.
+have {} get_k: unionm m1 m2 k = Some v by rewrite unionmE get_k'.
 by apply/namesmP; eapply PMFreeNamesVal; eauto.
 Qed.
 
@@ -1707,7 +1707,7 @@ apply/fsubsetP=> n n_in.
 case/fsubsetP/(_ _ n_in)/fsetUP: (supp_fperm s (names x)) => n_in_x.
   move/fsubsetP/(_ _ n_in) in sub; move/fdisjointP/(_ _ sub): dis.
   by rewrite in_fsetD negb_and negbK n_in_x orbF in_fsetU => ->.
-case/imfsetP: n_in_x n_in => {n} n n_in -> sn_in.
+case/imfsetP: n_in_x n_in => {} n n_in -> sn_in.
 move/fsubsetP/(_ _ sn_in): sub; rewrite fperm_supp => n_in_s.
 apply/fsetUP; right; rewrite -eq_l -renamenE -mem_fset_eqvar renameT.
 move/fdisjointP/(_ _ n_in_s): dis.
@@ -2245,7 +2245,7 @@ Qed.
 Lemma namesrE_int A x : names (restr A x) = names x :\: A.
 Proof.
 rewrite -[RHS]fset0U -(fsetDv (names x)) -fsetDIr fsetIC restrI.
-move: (A :&: names x) (fsubsetIr A (names x))=> {A} A subA.
+move: (A :&: names x) (fsubsetIr A (names x))=> {} A subA.
 rewrite /restr namesbE /= /prerestr_op /= subnamesE fsetDUl /=.
 by rewrite namesfsnE fsetDv fset0U fsetIC fsetDIr fsetDv fset0U.
 Qed.
@@ -2260,7 +2260,7 @@ Definition restr_hide A xx :=
 Lemma restr_hideE A A' x : restr_hide A (restr A' x) = restr (A :|: A') x.
 Proof.
 rewrite /restr_hide (restrI A') (restrI (_ :|: _)) fsetIUl.
-move: (A' :&: names x) (fsubsetIr A' (names x)) => {A'} A' subA'.
+move: (A' :&: names x) (fsubsetIr A' (names x)) => {} A' subA'.
 case: (urestrP0 subA')=> s _ dis sub.
 rewrite -{1}(renameKV s A) -fsetU_eqvar -restr_eqvar renameJ; last first.
   rewrite namesrE_int fsetUC fdisjointC; rewrite fdisjointC in dis.
@@ -2798,7 +2798,7 @@ Lemma pbindr2_eqvar A R :
   {finsupp A (pbindr2 A R)}.
 Proof.
 move=> fs.
-have {fs} fs: forall pm rx1 rx2,
+have {} fs: forall pm rx1 rx2,
     finsupp_perm A pm ->
     pbindr2 A R rx1 rx2 ->
     pbindr2 A R (rename pm rx1) (rename pm rx2).
@@ -2887,7 +2887,7 @@ case/(restrP (A :|: names x1)): rx2 dis21=> /= A2 x2.
 rewrite fdisjointUl => /andP [dis2 dis12] sub2.
 rewrite names_hider namesrE => dis21.
 exists (hide (A1 :|: A2) (Restr (x1, x2))).
-have {dis21} dis21: fdisjoint (names x2) A1.
+have {} dis21: fdisjoint (names x2) A1.
   rewrite -[names x2](fsetID _ A2) fdisjointUl dis21 andbT.
   apply: (fdisjoint_trans (fsubsetIr (names x2) A2)).
   rewrite fdisjointC.

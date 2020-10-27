@@ -9,6 +9,7 @@ Unset Printing Implicit Defensive.
 CoInductive hseq_nil : Type := HSeqNil.
 CoInductive hseq_cons T S : Type := HSeqCons of T & S.
 
+Declare Scope hseq_scope.
 Delimit Scope hseq_scope with hseq.
 Bind Scope hseq_scope with hseq_cons.
 
@@ -198,7 +199,7 @@ move/(_ hs) in IH.
 transitivity (x \in T_ i : nat)=> //.
 rewrite -mem_enum codomE.
 elim: (fintype.enum (T_ i)) (enum_uniq (T_ i))=> //= y e IHe /andP[/negPf ney].
-rewrite count_cat count_map inE /preim /= {1}/eq_op /= eq_sym => {IHe}/IHe->.
+rewrite count_cat count_map inE /preim /= {1}/eq_op /= eq_sym => {}/IHe->.
 by case: eqP => [->|_]; rewrite ?(ney, count_pred0, IH).
 Qed.
 
