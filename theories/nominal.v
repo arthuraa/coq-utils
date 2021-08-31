@@ -7,7 +7,7 @@ From mathcomp Require Import
 From deriving Require base.
 From deriving Require Import deriving.
 
-From extructures Require Import ord fset fmap fperm.
+From extructures Require Import ord fset fmap ffun fperm.
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -262,9 +262,9 @@ Proof.
 elim/fperm2_rect: s=> [|n n' s Pn Pn' IH]; first by rewrite rename1.
 have [->|neq dis] := altP (n =P n'); first by rewrite fperm2xx fperm_mul1s.
 have n_nin: n \notin names x.
-  move/fdisjointP: dis; apply; rewrite mem_supp fpermM /= (suppPn _ _ Pn).
+  move/fdisjointP: dis; apply; rewrite mem_supp fpermM /= (suppPn Pn).
   by rewrite fperm2L eq_sym.
-have n'_nin := (fdisjointP _ _ dis _ Pn').
+have n'_nin := (fdisjointP dis _ Pn').
 have {dis} /IH dis: fdisjoint (supp s) (names x).
   apply/fdisjointP=> n'' Pn''; move/fdisjointP: dis; apply.
   rewrite mem_supp fpermM /=; case: fperm2P; last by rewrite -mem_supp.
@@ -355,113 +355,119 @@ End NameNominal.
 
 End NominalTheory.
 
-Module IndNominalType.
+Module DerNominalType.
 
 Import base.
 
-Section Def.
+Section NominalType.
 
 Open Scope fset_scope.
 
-Variables (Σ : sig_inst Nominal.sort).
-Let F := IndF.functor Σ.
-Variables T : initAlgType F.
+Variables T : indType.
+Notation n := (Ind.Def.n T).
+Notation D := (Ind.Def.decl T).
+Variable sT : forall i, sig_class Nominal.sort (D i).
 
 Implicit Types (x y : T) (n : name).
 
-Let ind_rename s : T -> T :=
-  rec (fun args : F (T * T)%type =>
-         Roll (IndF.Cons
-                 (@arity_rec
-                    _ Nominal.sort (fun As => hlist (type_of_arg (T * T)) As -> hlist (type_of_arg T) As)
-                    (fun _ => tt)
-                    (fun (R : nominalType) As loop args => rename s args.(hd) ::: loop args.(tl))
-                    (fun   As loop args => args.(hd).2 ::: loop args.(tl))
-                    (nth_fin (IndF.constr args))
-                    (hnth (sig_inst_class Σ) (IndF.constr args))
-                    (IndF.args args)
-      ))).
-Let ind_names :=
-  rec (fun args : F (T * {fset name})%type =>
-         @arity_rec
-           _ Nominal.sort (fun As => hlist (type_of_arg (T * {fset name})) As -> {fset name})
-           (fun _ => fset0)
-           (fun R As loop args => names args.(hd) :|: loop args.(tl))
-           (fun   As loop args => args.(hd).2 :|: loop args.(tl))
-           _
-           (hnth (sig_inst_class Σ) (IndF.constr args))
-           (IndF.args args)).
+Import IndF.
 
-Lemma ind_renameP : Nominal.axioms ind_rename ind_names.
+Definition ind_rename_aux s :=
+  arity_rec
+    _ (fun As => hlist' (type_of_arg (T *F T)) As -> hlist' (type_of_arg T) As)
+    (fun _ => tt)
+    (fun (R : nominalType) As loop args =>
+       @rename R s args.(hd) ::: loop args.(tl))
+    (fun i As loop args => args.(hd).2 ::: loop args.(tl)).
+
+Definition ind_rename i s : T i -> T i :=
+  rec (fun i xs =>
+    Roll (Cons (ind_rename_aux s (sT i (constr xs)) (args xs)))) i.
+
+(** FIXME: Why is this equality needed in 8.11? *)
+Lemma ind_renameE s i xs :
+  @ind_rename i s (Roll xs) =
+  let xs' := fmap (fun j (x : T j) => (x, @ind_rename j s x)) xs in
+  Roll (Cons (ind_rename_aux s (sT i (constr xs')) (args xs'))).
+Proof. by rewrite /ind_rename recE. Qed.
+
+Definition ind_names_aux :=
+  arity_rec
+    _ (fun As => hlist' (type_of_arg (T *F (fun _ => {fset name}))) As
+                 -> {fset name})
+    (fun _ => fset0)
+    (fun (R : nominalType) As loop args => @names R args.(hd) :|: loop args.(tl))
+    (fun i As loop args => args.(hd).2 :|: loop args.(tl)).
+
+Definition ind_names : forall i, T i -> {fset name} :=
+  rec (fun i xs => ind_names_aux (sT i (constr xs)) (args xs)).
+
+Lemma ind_namesE i xs :
+  @ind_names i (Roll xs) =
+  let xs' := fmap (fun j (x : T j) => (x, @ind_names j x)) xs in
+  ind_names_aux (sT i (constr xs')) (args xs').
+Proof. by rewrite /ind_names recE. Qed.
+
+Lemma ind_renameP i : Nominal.axioms (@ind_rename i) (@ind_names i).
 Proof.
 split.
-- move=> s1 s2; elim/indP=> [[i args]].
-  rewrite /ind_rename 3!recE /= -![rec _]/(ind_rename _).
-  congr (Roll (IndF.Cons _)).
-  elim/arity_ind: {i} (nth_fin i) / (hnth _ i) args => //=.
-  + by move=> R As cAs IH [x args] /=; rewrite {}IH renameA.
-  + by move=> As cAs IH [[x xP] args] /=; rewrite {}IH xP.
-- move=> n n'; elim/indP=> [[i args]].
-  rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
-  rewrite /ind_names !recE /= -![rec _]/(ind_names) => Hn Hn' /=.
+- move=> s1 s2; elim/indP: i / => i [j xs].
+  rewrite !ind_renameE /=; congr (Roll (IndF.Cons _)).
+  elim/arity_ind: {j} (nth_fin j) / (hnth _ j) xs => //=.
+  + by move=> R As cAs IH [x xs] /=; rewrite {}IH renameA.
+  + by move=> j As cAs IH [[x xP] xs] /=; rewrite {}IH xP.
+- move=> n n'; elim/indP: i / => i [j xs].
+  rewrite !ind_renameE !ind_namesE => /= Hn Hn'.
   do 2![apply: congr1]=> /=.
-  elim/arity_ind: {i} (nth_fin i) / (hnth _ i) args Hn Hn'=> //=.
-  + move=> R As cAs IH [x args] /=.
+  elim/arity_ind: {j} (nth_fin j) / (hnth _ j) xs Hn Hn'=> //=.
+  + move=> R As cAs IH [x xs] /=.
     rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
     case/norP=> n'_args n'_rargs.
     by rewrite namesNNE // IH.
-  + move=> a ac IH [[x xP] args] /=.
+  + move=> j a ac IH [[x xP] xs] /=.
     rewrite !in_fsetU /=; case/norP=> n_args n_rargs.
     case/norP=> n'_args n'_rargs.
     by rewrite xP // IH.
-- move=> n n'; elim/indP=> [[i args]].
-  rewrite /ind_rename !recE /= -![rec _]/(ind_rename _).
-  rewrite /ind_names !recE /= -![rec _]/(ind_names) /=.
-  move=> Hn /Roll_inj/IndF.inj /= Hargs.
-  elim/arity_ind: {i} _ / (hnth _ i) args Hn Hargs=> //=.
-  + move=> R As cAs IH [x args] /= Hn [Hx Hargs].
+- move=> n n'; elim/indP: i / => i [j xs].
+  rewrite !ind_renameE !ind_namesE /=.
+  move=> Hn /Roll_inj/IndF.inj /= Hxs.
+  elim/arity_ind: {j} _ / (hnth _ j) xs Hn Hxs=> //=.
+  + move=> R As cAs IH [x xs] /= Hn [Hx Hxs].
     case/fsetUP: Hn=> Hn.
       apply/fsetUP; left; exact: namesTeq Hn Hx.
     by apply/fsetUP; right; apply: IH.
-  + move=> As cAs IH [[x xP] args] /= Hn [Hx Hargs].
+  + move=> j As cAs IH [[x xP] xs] /= Hn [Hx Hxs].
     case/fsetUP: Hn=> Hn.
       apply/fsetUP; left; exact: xP Hn Hx.
     by apply/fsetUP; right; apply: IH.
 Qed.
 
-End Def.
+End NominalType.
 
-Definition nominalMixin :=
-  fun (T : Type) =>
-  fun Σ (sT_ind : indType Σ) & phant_id (Ind.sort sT_ind) T =>
-  fun sΣ & phant_id (sig_inst_sort sΣ) Σ =>
-  fun cT_ind & phant_id (Ind.class sT_ind) cT_ind =>
-  fun sT_ord & phant_id (Ord.sort sT_ord) T =>
-  fun (cT : Ord.class_of T) & phant_id (Ord.class sT_ord) cT =>
-  ltac:(
-    let cl t :=
-      eval compute -[name_ordType fsetU fset0 names rename fset_of
-                     Nominal.sort FPerm.fperm_of Ord.sort] in t in
-    match type of (@ind_renameP sΣ (@Ind.Pack sΣ T cT_ind)) with
-    | Nominal.axioms ?r ?n =>
-      let r' := cl r in
-      let n' := cl n in
-      exact: (@NominalMixin T r' n' (@ind_renameP sΣ (Ind.Pack cT_ind)))
-    end).
+Definition pack T :=
+  [infer indType of T with Nominal.sort as sT n sorts D cD in
+   @NominalMixin _ _ _ (@ind_renameP sT cD (Ind.idx sT))].
 
-Module Import Exports.
-Notation "[ 'indNominalMixin' 'for' T ]" :=
-  (let sT := @nominalMixin T _ _ id _ id _ id _ id _ id in
-   ltac:(
-     hnf in sT;
-     let x := eval unfold sT in sT in exact x))
-  (at level 0, format "[ 'indNominalMixin'  'for'  T ]") : form_scope.
+End DerNominalType.
 
-End Exports.
+Notation "[ 'derive' 'nored' 'nominalMixin' 'for' T ]" :=
+  (@DerNominalType.pack T _ id _ _ _ _ _ _ id _ id _ id)
+  (at level 0) : form_scope.
 
-End IndNominalType.
+Ltac derive_nominalMixin T :=
+  match eval hnf in [derive nored nominalMixin for T] with
+  | @EqMixin _ ?op ?opP =>
+    let op := eval unfold DerNominalType.ind_rename,
+              DerNominalType.ind_rename_aux,
+              DerNominalType.ind_names,
+              DerNominalType.ind_names_aux in op in
+    let op := eval deriving_compute in op in
+    exact (@NominalMixin T op opP)
+  end.
 
-Export IndNominalType.Exports.
+Notation "[ 'derive' 'nominalMixin' 'for' T ]" :=
+  (ltac:(derive_eqMixin T))
+  (at level 0) : form_scope.
 
 Ltac finsupp := typeclasses eauto with typeclass_instances.
 
@@ -1126,7 +1132,7 @@ have dis' : finsupp_perm A (s^-1 * s' * s).
   by move/eqP: dis=> ->; rewrite imfset0.
 rewrite -{1}[x](renameKV s) -(f1f2 (rename s^-1 x) _ erefl).
 rewrite -[LHS](renameKV s) 2![rename _ (rename _ (f1 _))]renameA.
-rewrite fperm_mulA fs_f1 f1f2 !renameA !fperm_mulA fperm_mulsK.
+rewrite fperm_mulA fs_f1 f1f2 !renameA 2!fperm_mulA fperm_mulsK.
 by rewrite fperm_mulsV fperm_mul1s.
 Qed.
 
@@ -1545,7 +1551,7 @@ Variable T : nominalType.
 Variable l : T -> {fset name}.
 Hypothesis eq_l : {eqvar l}.
 
-Implicit Types (x y : T).
+Implicit Types (x y : T) (s : {fperm name}).
 
 Definition eq x y :=
   has (fun s => [&& fdisjoint (supp s) (names x :\: l x) &
@@ -1553,7 +1559,7 @@ Definition eq x y :=
       (enum_fperm (names x :|: names y)).
 
 Lemma eqP x y :
-  reflect (exists2 s, fdisjoint (supp s) (names x :\: l x) &
+  reflect (exists2 s : {fperm name}, fdisjoint (supp s) (names x :\: l x) &
                       rename s x = y)
           (eq x y).
 Proof.
@@ -1671,8 +1677,9 @@ apply: (@fdisjoint_trans _ _ (names x')).
 rewrite /x' names_rename /s; exact: avoidP.
 Qed.
 
-Lemma bind_eqP x y : (exists2 s, fdisjoint (supp s) (names x :\: l x) &
-                                 rename s x = y) <->
+Lemma bind_eqP x y : (exists2 s : {fperm name},
+                        fdisjoint (supp s) (names x :\: l x) &
+                        rename s x = y) <->
                      bind x = bind y.
 Proof.
 rewrite [bind]unlock /=; split.
@@ -1681,7 +1688,7 @@ by move=> [] /eqmodP/BoundEq.eqP.
 Qed.
 
 (* FIXME: Find better name for this *)
-Lemma bind_eqPs x y : (exists s,
+Lemma bind_eqPs x y : (exists s : {fperm name},
                           [/\ fdisjoint (supp s) (names x :\: l x),
                            fsubset (supp s) (l x :|: l y) &
                            rename s x = y]) <->
@@ -1715,7 +1722,7 @@ by rewrite in_fsetD negb_and negbK n_in orbF.
 Qed.
 
 CoInductive ubind_spec D x : T -> Prop :=
-| UBindSpec s of fdisjoint (supp s) (names x :\: l x)
+| UBindSpec (s : {fperm name}) of fdisjoint (supp s) (names x :\: l x)
   & fdisjoint (supp s) D : ubind_spec D x (rename s x).
 
 Lemma ubindP D x : fdisjoint D (l x) -> ubind_spec D x (unbind D (bind x)).
@@ -1821,7 +1828,7 @@ rewrite -(fs_f s dis''') renameJ // fdisjointC.
 suffices ?: fsubset (names (f x)) (D :|: names x :\: l x).
   apply: fdisjoint_trans; first by eauto.
   by rewrite fdisjointUl fdisjointC dis''' fdisjointC.
-rewrite -(fsetDidPl _ _ dis') -(fsetDidPl _ _ dis) -fsetDUl fsetSD //.
+rewrite -(fsetDidPl dis') -(fsetDidPl dis) -fsetDUl fsetSD //.
 by eapply nom_finsuppP; finsupp.
 Qed.
 
@@ -1845,6 +1852,7 @@ Variables (lT : T -> {fset name}) (lS : S -> {fset name}).
 Hypothesis (eq_T : {eqvar lT}) (eq_S : {eqvar lS}).
 
 Implicit Types (x : T) (y : S) (xx : {bound lT}) (yy : {bound lS}).
+Implicit Types (s : {fperm name}).
 
 Definition unbind2 D xx yy :=
   let x := unbind (D :|: names yy) xx in
@@ -2172,9 +2180,10 @@ by rewrite -fsetIA fsetIid.
 Qed.
 
 Lemma restr_eqP_int A1 x1 A2 x2 :
-  (exists2 s, fdisjoint (supp s) (names x1 :\: A1) &
-              (rename s (A1 :&: names x1), rename s x1) =
-              (A2 :&: names x2, x2))
+  (exists2 s : {fperm name},
+     fdisjoint (supp s) (names x1 :\: A1) &
+     (rename s (A1 :&: names x1), rename s x1) =
+     (A2 :&: names x2, x2))
   <-> restr A1 x1 = restr A2 x2.
 Proof.
 rewrite /restr -bind_eqP /= /prerestr_op /=; split.
@@ -2265,9 +2274,9 @@ case: (urestrP0 subA')=> s _ dis sub.
 rewrite -{1}(renameKV s A) -fsetU_eqvar -restr_eqvar renameJ; last first.
   rewrite namesrE_int fsetUC fdisjointC; rewrite fdisjointC in dis.
   by apply: fdisjoint_trans dis; rewrite -fsetDDl fsubDset fsubsetUr.
-rewrite [LHS]restrI fsetIUl (fsetIidPl _ _ subA') -(fsetID (names x) A').
+rewrite [LHS]restrI fsetIUl (fsetIidPl subA') -(fsetID (names x) A').
 rewrite ![_ :|: _ :\: _]fsetUC !fsetIUr -!fsetUA !fsetIA.
-rewrite !(fsetUidPr _ _ (fsubsetIr _ A')) -[_ :&: _](renameK s) fsetI_eqvar.
+rewrite !(fsetUidPr (fsubsetIr _ A')) -[_ :&: _](renameK s) fsetI_eqvar.
 rewrite renameKV [rename s _]renameJ ?namesfsnE // renameJ //.
 rewrite supp_inv fdisjointC namesfsnE; rewrite fdisjointC in dis.
 apply: fdisjoint_trans dis; exact: fsubsetIr.
@@ -2279,9 +2288,9 @@ constructor.
 - move=> s A _ <- xx _ <-; case/(restrP_int fset0): xx=> A' x _ sub.
   by rewrite !(restr_eqvar, restr_hideE); finsupp.
 - move=> A; case/(restrP_int fset0)=> A' x _ sub; rewrite !restr_hideE.
-  rewrite namesrE_int [LHS]restrI fsetIUl (fsetIidPl _ _ sub); congr restr.
+  rewrite namesrE_int [LHS]restrI fsetIUl (fsetIidPl sub); congr restr.
   rewrite -{1}(fsetID (names x) A') [in A :&: _]fsetUC fsetIUr -fsetUA.
-  by rewrite fsetIA (fsetUidPr _ _ (fsubsetIr _ _)).
+  by rewrite fsetIA (fsetUidPr (fsubsetIr _ _)).
 - move=> A1 A2; case/(restrP_int fset0)=> A'' x _ _.
   by rewrite !restr_hideE fsetUA.
 - by case/(restrP_int fset0)=> A x _ sub; rewrite restr_hideE fset0U.
@@ -2310,9 +2319,10 @@ by rewrite /hide /= restr_hideE !namesrE_int fsetDDl fsetUC.
 Qed.
 
 Lemma restr_eqP A1 x1 A2 x2 :
-  (exists2 s, fdisjoint (supp s) (names x1 :\: A1) &
-              (rename s (A1 :&: names x1), rename s x1) =
-              (A2 :&: names x2, x2))
+  (exists2 s : {fperm name},
+     fdisjoint (supp s) (names x1 :\: A1) &
+     (rename s (A1 :&: names x1), rename s x1) =
+     (A2 :&: names x2, x2))
   <-> hide A1 (Restr x1) = hide A2 (Restr x2).
 Proof.
 by rewrite restr_eqP_int /Restr /hide /= !restr_hideE !fsetU0.
@@ -2357,7 +2367,7 @@ Lemma elimrE (S : nominalType) A (f : {fset name} -> T -> S) A' x :
 Proof.
 move=> fs_f dis1 dis2 sub.
 rewrite /elimr /restr /Restr /hide /= restr_hideE fsetU0.
-by rewrite elimbE /prerestr_op /= ?(fsetIidPl _ _ sub).
+by rewrite elimbE /prerestr_op /= ?(fsetIidPl sub).
 Qed.
 
 End Def.
