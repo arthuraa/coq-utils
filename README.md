@@ -21,11 +21,11 @@ with structure).
 
 The package currently needs to be compiled by hand.  The requirements are:
 
-- Coq v8.10 -- v8.12
+- Coq v8.10 -- v8.13
 - `coq-mathcomp-ssreflect`, `coq-mathcomp-fingroup`, `coq-mathcomp-algebra`
-  v1.9 -- v1.11
-- `coq-extructures` (`dev` version; available in the `extra-dev` repository)
-- `coq-deriving` (available in the `extra-dev` repository)
+  v1.11 -- v1.12
+- `coq-deriving` (`v0.1`)
+- `coq-extructures` (`v0.3`)
 
 To compile the package, simply run
 
