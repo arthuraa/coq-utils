@@ -256,9 +256,10 @@ Proof. exact: can_inj word_of_bitsK. Qed.
 
 Lemma bits_of_wordK : cancel bits_of_word word_of_bits.
 Proof.
-have := (inj_card_bij word_of_bits_inj).
-rewrite card_word card_ffun card_bool card_ord=> /(_ erefl) Hbij.
-have [inv Hinv Hinv'] := (Hbij).
+have Hbij : bijective word_of_bits.
+  apply: inj_card_bij word_of_bits_inj _.
+  by rewrite card_word card_ffun card_bool card_ord.
+have [inv Hinv Hinv'] := Hbij.
 move: (bij_can_eq Hbij word_of_bitsK Hinv) => H w.
 by rewrite H Hinv'.
 Qed.
