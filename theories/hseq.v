@@ -1,3 +1,4 @@
+From HB Require Import structures.
 From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat seq eqtype choice fintype
   tuple bigop finfun.
@@ -74,9 +75,7 @@ elim: idx hs1 => [|i idx IH] //= [x hs] /=.
 by rewrite eqxx IH.
 Qed.
 
-Definition hseq_eqMixin idx := EqMixin (@hseq_eqP idx).
-Canonical hseq_eqType idx :=
-  Eval hnf in EqType (hseq T_ idx) (hseq_eqMixin idx).
+HB.instance Definition _ idx := hasDecEq.Build _ (@hseq_eqP idx).
 
 End HSeqEqType.
 
@@ -89,7 +88,7 @@ Variables (I : Type) (T_ : I -> choiceType).
 Import Choice.InternalTheory.
 Import CodeSeq.
 
-Fact hseq_choiceMixin idx : choiceMixin (hseq T_ idx).
+Fact hseq_choiceMixin idx : hasChoice.axioms (hseq T_ idx).
 Proof.
 pose fix f idx ns {struct idx} :=
   match idx return pred (hseq T_ idx) -> option (hseq T_ idx) with
@@ -129,8 +128,7 @@ have {IH} -> : find (fx P) =1 find (fx Q).
 case: (find _ _) => [x|] //=.
 by rewrite /fx in E'; rewrite E'.
 Qed.
-Canonical hseq_choiceType idx :=
-  Eval hnf in ChoiceType (hseq T_ idx) (hseq_choiceMixin idx).
+HB.instance Definition _ idx := hseq_choiceMixin idx.
 
 End Def.
 
@@ -167,10 +165,9 @@ End Def.
 
 End HSeqCountType.
 
-Definition hseq_countMixin I T_ idx :=
-  PcanCountMixin (@HSeqCountType.nats_of_hseqK I T_ idx).
-Canonical hseq_countType I (T_ : I -> countType) idx :=
-  Eval hnf in CountType (hseq T_ idx) (hseq_countMixin T_ idx).
+HB.instance Definition _ I (T_ : I -> countType) idx :=
+  Countable.copy (hseq T_ idx)
+    (pcan_type (@HSeqCountType.nats_of_hseqK I T_ idx)).
 
 Module Type FinHSeqSig.
 Section FinHSeqSig.
@@ -217,8 +214,8 @@ Section UseFinHSeq.
 
 Variables (I : Type) (T_ : I -> finType) (idx : seq I).
 
-Definition hseq_finMixin := FinMixin (@FinHSeq.enumP I T_ idx).
-Canonical hseq_finType := Eval hnf in FinType (hseq T_ idx) hseq_finMixin.
+HB.instance Definition _ hseq_finMixin :=
+  isFinite.Build (hseq T_ idx) (@FinHSeq.enumP I T_ idx).
 
 End UseFinHSeq.
 

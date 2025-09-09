@@ -1,10 +1,12 @@
+From HB Require Import structures.
+
 From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype div ssralg finalg
   zmodp bigop tuple finfun binomial ssrint intdiv ssrnum.
 
 From extructures Require Import ord.
 
-Require Import hseq nominal.
+Require Import hseq (* nominal *).
 
 Set Implicit Arguments.
 Unset Strict Implicit.
@@ -19,20 +21,11 @@ Structure non_zero : Type := NonZero {
   _ : nat_of_non_zero != 0
 }.
 
-Canonical non_zero_subType := [subType for nat_of_non_zero].
-Definition non_zero_eqMixin := [eqMixin of non_zero by <:].
-Canonical non_zero_eqType := Eval hnf in EqType non_zero non_zero_eqMixin.
-Definition non_zero_choiceMixin := [choiceMixin of non_zero by <:].
-Canonical non_zero_choiceType :=
-  Eval hnf in ChoiceType non_zero non_zero_choiceMixin.
-Definition non_zero_countMixin := [countMixin of non_zero by <:].
-Canonical non_zero_countType :=
-  Eval hnf in CountType non_zero non_zero_countMixin.
-Canonical non_zero_subCountType :=
-  Eval hnf in [subCountType of non_zero].
-Definition non_zero_ordMixin := [ordMixin of non_zero by <:].
-Canonical non_zero_ordType :=
-  Eval hnf in OrdType non_zero non_zero_ordMixin.
+HB.instance Definition _ := [isSub for nat_of_non_zero].
+HB.instance Definition _ := [Equality of non_zero by <:].
+HB.instance Definition _ := [Choice of non_zero by <:].
+HB.instance Definition _ := [Countable of non_zero by <:].
+HB.instance Definition _ := [Ord of non_zero by <:].
 
 Canonical non_zero_succn n := @NonZero n.+1 erefl.
 
@@ -46,21 +39,16 @@ Definition ord_of_word (w : word) := let: Word i := w in i.
 
 Coercion ord_of_word : word >-> ordinal.
 
-Canonical word_subType := [newType for ord_of_word].
-Definition word_eqMixin := [eqMixin of word by <:].
-Canonical word_eqType := Eval hnf in EqType word word_eqMixin.
-Definition word_choiceMixin := [choiceMixin of word by <:].
-Canonical word_choiceType := Eval hnf in ChoiceType word word_choiceMixin.
-Definition word_countMixin := [countMixin of word by <:].
-Canonical word_countType := Eval hnf in CountType word word_countMixin.
-Canonical word_subCountType := Eval hnf in [subCountType of word].
-Definition word_finMixin := [finMixin of word by <:].
-Canonical word_finType := Eval hnf in FinType word word_finMixin.
-Canonical word_subFinType := Eval hnf in [subFinType of word].
-Definition word_ordMixin := [ordMixin of word by <:].
-Canonical word_ordType := Eval hnf in OrdType word word_ordMixin.
+HB.instance Definition _ := [isNew for ord_of_word].
+HB.instance Definition _ := [Equality of word by <:].
+HB.instance Definition _ := [Choice of word by <:].
+HB.instance Definition _ := [Countable of word by <:].
+HB.instance Definition _ := [Finite of word by <:].
+HB.instance Definition _ := [Ord of word by <:].
+(*
 Canonical word_nominalType := Eval hnf in [nominalType for word by //].
 Canonical word_trivialNominalType := Eval hnf in [trivialNominalType for word].
+*)
 
 Lemma card_word : #|{: word}| = 2 ^ k.
 Proof. by rewrite card_sub eq_cardT // -cardT card_ord. Qed.
@@ -127,19 +115,20 @@ Qed.
 Lemma addwC : commutative addw.
 Proof. by move=> x y; do 2!apply: val_inj; rewrite /= addnC. Qed.
 
-Definition word_zmodMixin := ZmodMixin addwA addwC add0w addNw.
-Canonical word_zmodType := ZmodType word word_zmodMixin.
-Canonical word_finZmodType := Eval hnf in [finZmodType of word].
+HB.instance Definition _ := GRing.isZmodule.Build word addwA addwC add0w addNw.
+
+(*
 Canonical word_baseFinGroupType :=
   Eval hnf in [baseFinGroupType of word for +%R].
 Canonical word_finGroupType := Eval hnf in [finGroupType of word for +%R].
+*)
 
 Lemma addw0 : right_id zerow addw. Proof. exact: GRing.addr0. Qed.
 Lemma addwN : right_inverse zerow oppw addw. Proof. exact: GRing.addrN. Qed.
 
 Lemma as_word_add : {morph as_word : n m / (n + m)%R >-> (n + m)%R}.
 Proof.
-have absz_pos: forall m : int, (0 <= m)%R -> `|m| = m :> int by case.
+have absz_pos: forall m : int, (0 <= m)%R -> `|m| = m :> (int) by case.
 have modz_pos: forall n m : int, (0 < m)%R -> (0 <= (n %% m)%Z)%R.
   move=> n m; case: (intP m) => {m} [|m|m] //= _.
   by rewrite /modz Num.Theory.subr_ge0 lez_floor.
@@ -247,7 +236,7 @@ rewrite [in X in _ + _ + X](eq_big_seq f); last first.
 rewrite -big_distrl /= expnS mulnA.
 rewrite !divnDr ?mulnK ?dvdn_mull ?dvdnn ?expn_gt0 //.
 rewrite divn_small; last by apply: Hsum2.
-rewrite add0n odd_add odd_mul andbF addbF oddb.
+rewrite add0n oddD oddM andbF addbF oddb.
 by apply: f_equal; apply: val_inj.
 Qed.
 
@@ -453,12 +442,10 @@ Variable k : non_zero.
 Lemma onewN0 : 1%w != 0%w :> word k.
 Proof. by rewrite onew_zero (valP k). Qed.
 
-Definition word_ringMixin :=
-  RingMixin (@mulwA k) (@mul1w k) (@mulw1 k)
-            (@mulw_addl k) (@mulw_addr k) onewN0.
-
-Canonical word_ringType :=
-  Eval hnf in RingType (word k) word_ringMixin.
+HB.instance Definition _ :=
+  GRing.Zmodule_isNzRing.Build
+    (word k) (@mulwA k) (@mul1w k) (@mulw1 k)
+    (@mulw_addl k) (@mulw_addr k) onewN0.
 
 End NonZero.
 
@@ -547,7 +534,7 @@ rewrite /bits_of_word -!lock !ffunE /= !modz_nat !absz_nat modn_mod.
 rewrite subnS subnDl -subnS.
 rewrite {1}(divn_eq w (2 ^ sumn ks)) -[in X in _ %/ _ * X](subnK (valP i)) /=.
 rewrite [in X in _ %/ _ * X]expnD -(mulnC (2 ^ i.+1)) mulnA.
-by rewrite divnMDl ?exp2_gt0 // odd_add expnS !odd_mul !andbF.
+by rewrite divnMDl ?exp2_gt0 // oddD expnS !oddM !andbF.
 Qed.
 
 End Splitting.

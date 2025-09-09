@@ -1,5 +1,7 @@
 From Coq Require Import String.
 
+From HB Require Import structures.
+
 From mathcomp Require Import
   ssreflect ssrfun ssrbool ssrnat eqtype seq choice fintype tuple bigop
   generic_quotient.
@@ -17,15 +19,11 @@ CoInductive name : Type := Name of nat.
 
 Definition nat_of_name (n : name) := let: Name n := n in n.
 
-Canonical name_newType := Eval hnf in [newType for nat_of_name].
-Definition name_eqMixin := [eqMixin of name by <:].
-Canonical name_eqType := Eval hnf in EqType name name_eqMixin.
-Definition name_choiceMixin := [choiceMixin of name by <:].
-Canonical name_choiceType := Eval hnf in ChoiceType name name_choiceMixin.
-Definition name_countMixin := [countMixin of name by <:].
-Canonical name_countType := Eval hnf in CountType name name_countMixin.
-Definition name_ordMixin := [ordMixin of name by <:].
-Canonical name_ordType := Eval hnf in OrdType name name_ordMixin.
+HB.instance Definition _ := [isNew for nat_of_name].
+HB.instance Definition _ := [Equality of name by <:].
+HB.instance Definition _ := [Choice of name by <:].
+HB.instance Definition _ := [Countable of name by <:].
+HB.instance Definition _ := [Ord of name by <:].
 
 Section Fresh.
 
@@ -134,76 +132,33 @@ Qed.
 
 End AvoidDef.
 
-Module Nominal.
+Section Axioms.
 
-Section ClassDef.
+Variables (T : Type).
+Variables (rename : {fperm name} -> T -> T).
+Variables (names : T -> {fset name}).
 
-Local Open Scope fset_scope.
-Local Open Scope fperm_scope.
-
-Record axioms T (rename : {fperm name} -> T -> T) (names : T -> {fset name}) := Axioms {
-  _ : forall s1 s2 x, rename s1 (rename s2 x) = rename (s1 * s2) x;
+Record nominalAxioms : Prop := NominalAxioms {
+  _ : forall s1 s2 x, rename s1 (rename s2 x) = rename (s1 * s2)%fperm x;
   _ : forall n n' x,
-        n \notin names x -> n' \notin names x -> rename (fperm2 n n') x = x;
+    n \notin names x -> n' \notin names x ->
+    rename (fperm2 n n') x = x;
   _ : forall n n' x,
-        n \in names x -> rename (fperm2 n n') x = x -> n' \in names x
+    n \in names x -> rename (fperm2 n n') x = x -> n' \in names x;
 }.
 
-Record mixin_of T := Mixin {
+End Axioms.
+
+HB.mixin Record hasNominal T := Mixin {
   rename : {fperm name} -> T -> T;
   names : T -> {fset name};
-  _ : axioms rename names
+  nomP : nominalAxioms rename names;
 }.
 
-Record class_of T := Class {base : Ord.class_of T; mixin : mixin_of T}.
-Local Coercion base : class_of >-> Ord.class_of.
-
-Structure type := Pack {sort; _ : class_of sort}.
-Local Coercion sort : type >-> Sortclass.
-Variables (T : Type) (cT : type).
-Definition class := let: Pack _ c as cT' := cT return class_of cT' in c.
-Definition clone c of phant_id class c := @Pack T c.
-Let xT := let: Pack T _ := cT in T.
-Notation xclass := (class : class_of xT).
-
-Definition pack m :=
-  fun b bT & phant_id (Ord.class bT) b => Pack (@Class T b m).
-
-(* Inheritance *)
-Definition eqType := @Equality.Pack cT xclass.
-Definition choiceType := @Choice.Pack cT xclass.
-Definition ordType := @Ord.Pack cT xclass.
-
-End ClassDef.
-
-Module Import Exports.
-Coercion base : class_of >-> Ord.class_of.
-Coercion mixin : class_of >-> mixin_of.
-Coercion sort : type >-> Sortclass.
-Coercion eqType : type >-> Equality.type.
-Canonical eqType.
-Coercion choiceType : type >-> Choice.type.
-Canonical choiceType.
-Coercion ordType : type >-> Ord.type.
-Canonical ordType.
-Notation nominalType := type.
-Notation nominalMixin := mixin_of.
-Notation NominalMixin := Mixin.
-Notation NominalType T m := (@pack T m _ _ id).
-Notation "[ 'nominalType' 'of' T 'for' cT ]" :=  (@clone T cT _ idfun)
-  (at level 0, format "[ 'nominalType'  'of'  T  'for'  cT ]") : form_scope.
-Notation "[ 'nominalType' 'of' T ]" := (@clone T _ _ id)
-  (at level 0, format "[ 'nominalType'  'of'  T ]") : form_scope.
-End Exports.
-
-End Nominal.
-Export Nominal.Exports.
-
-Definition rename (T : nominalType) :=
-  Nominal.rename (Nominal.class T).
-
-Definition names (T : nominalType) :=
-  Nominal.names (Nominal.class T).
+#[short(type="nominalType")]
+HB.structure Definition Nominal := {
+  T of hasNominal T & Ord.Ord T
+}.
 
 Section NominalTheory.
 
@@ -217,16 +172,16 @@ Variable T : nominalType.
 Implicit Types (s : {fperm name}) (x : T) (n : name).
 
 Lemma renameA s1 s2 x : rename s1 (rename s2 x) = rename (s1 * s2) x.
-Proof. by case: T s1 s2 x=> [? [? [? ? []]] ?]. Qed.
-
-Lemma namesTeq n n' x :
-  n \in names x -> rename (fperm2 n n') x = x -> n' \in names x.
-Proof. by case: T n n' x=> [? [? [?? []]] ?]. Qed.
+Proof. by case: (@nomP T). Qed.
 
 Lemma namesNNE n n' x :
   n \notin names x -> n' \notin names x ->
   rename (fperm2 n n') x = x.
-Proof. by case: T n n' x=> [? [? [?? []]] ?]. Qed.
+Proof. by case: (@nomP T); eauto. Qed.
+
+Lemma namesTeq n n' x :
+  n \in names x -> rename (fperm2 n n') x = x -> n' \in names x.
+Proof. by case: (@nomP T); eauto. Qed.
 
 Lemma mem_names n x (X : {fset name}) :
   (forall n', n' \notin X -> rename (fperm2 n n') x != x) ->
@@ -332,7 +287,7 @@ Definition name_rename s n := s n.
 
 Definition name_names n := fset1 n.
 
-Lemma name_renameP : Nominal.axioms name_rename name_names.
+Lemma name_renameP : nominalAxioms name_rename name_names.
 Proof.
 rewrite /name_rename /name_names; split.
 - by move=> ???; rewrite fpermM.
@@ -340,8 +295,7 @@ rewrite /name_rename /name_names; split.
 - by move=> n n' n'' /fset1P <-{n''}; rewrite in_fset1 fperm2L=> ->.
 Qed.
 
-Definition name_nominalMixin := NominalMixin name_renameP.
-Canonical name_nominalType := Eval hnf in NominalType name name_nominalMixin.
+HB.instance Definition _ := hasNominal.Build name name_renameP.
 
 Lemma renamenE s n : rename s n = s n. Proof. by []. Qed.
 
@@ -408,7 +362,7 @@ Lemma ind_namesE i xs :
   ind_names_aux (sT i (constr xs')) (args xs').
 Proof. by rewrite /ind_names recE. Qed.
 
-Lemma ind_renameP i : Nominal.axioms (@ind_rename i) (@ind_names i).
+Lemma ind_renameP i : nominalAxioms (@ind_rename i) (@ind_names i).
 Proof.
 split.
 - move=> s1 s2; elim/indP: i / => i [j xs].
@@ -446,7 +400,7 @@ End NominalType.
 
 Definition pack T :=
   [infer indType of T with Nominal.sort as sT n sorts D cD in
-   @NominalMixin _ _ _ (@ind_renameP sT cD (Ind.idx sT))].
+   @hasNominal.Axioms_ _ _ _ (@ind_renameP sT cD (Ind.idx sT))].
 
 End DerNominalType.
 
@@ -454,19 +408,20 @@ Notation "[ 'derive' 'nored' 'nominalMixin' 'for' T ]" :=
   (@DerNominalType.pack T _ id _ _ _ _ _ _ id _ id _ id)
   (at level 0) : form_scope.
 
+(* FIXME: This does not work. *)
 Ltac derive_nominalMixin T :=
   match eval hnf in [derive nored nominalMixin for T] with
-  | @EqMixin _ ?op ?opP =>
+  | @hasNominal.axioms _ ?op ?opP =>
     let op := eval unfold DerNominalType.ind_rename,
               DerNominalType.ind_rename_aux,
               DerNominalType.ind_names,
               DerNominalType.ind_names_aux in op in
     let op := eval deriving_compute in op in
-    exact (@NominalMixin T op opP)
+    exact (@hasNominal.axioms T op opP)
   end.
 
 Notation "[ 'derive' 'nominalMixin' 'for' T ]" :=
-  (ltac:(derive_eqMixin T))
+  (ltac:(derive_nominalMixin T))
   (at level 0) : form_scope.
 
 Ltac finsupp := typeclasses eauto with typeclass_instances.
@@ -606,10 +561,8 @@ Definition trivial_rename s x := x.
 
 Definition trivial_names x := fset0 : {fset name}.
 
-Lemma trivial_renameP : Nominal.axioms trivial_rename trivial_names.
+Lemma trivial_renameP : nominalAxioms trivial_rename trivial_names.
 Proof. by split. Qed.
-
-Definition DefNominalMixin := NominalMixin trivial_renameP.
 
 End Mixins.
 
